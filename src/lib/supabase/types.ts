@@ -1,0 +1,526 @@
+// AVOID UPDATING THIS FILE DIRECTLY. It is automatically generated.
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: '14.17'
+  }
+  public: {
+    Tables: {
+      categorias: {
+        Row: {
+          created_at: string
+          id: number
+          nome: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          nome: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          nome?: string
+        }
+        Relationships: []
+      }
+      emprestimo: {
+        Row: {
+          atraso: boolean
+          created_at: string
+          data_devolucao_real: string | null
+          data_emprestimo: string
+          data_prevista_devolucao: string
+          dias_atraso: number | null
+          id_emprestimo: number
+          id_exemplar: string
+          id_leitor: number
+          numero_renovacoes: number
+        }
+        Insert: {
+          atraso?: boolean
+          created_at?: string
+          data_devolucao_real?: string | null
+          data_emprestimo?: string
+          data_prevista_devolucao: string
+          dias_atraso?: number | null
+          id_emprestimo?: never
+          id_exemplar: string
+          id_leitor: number
+          numero_renovacoes?: number
+        }
+        Update: {
+          atraso?: boolean
+          created_at?: string
+          data_devolucao_real?: string | null
+          data_emprestimo?: string
+          data_prevista_devolucao?: string
+          dias_atraso?: number | null
+          id_emprestimo?: never
+          id_exemplar?: string
+          id_leitor?: number
+          numero_renovacoes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'emprestimo_id_exemplar_fkey'
+            columns: ['id_exemplar']
+            isOneToOne: false
+            referencedRelation: 'exemplar'
+            referencedColumns: ['id_exemplar']
+          },
+          {
+            foreignKeyName: 'emprestimo_id_leitor_fkey'
+            columns: ['id_leitor']
+            isOneToOne: false
+            referencedRelation: 'leitor'
+            referencedColumns: ['id_leitor']
+          },
+        ]
+      }
+      exemplar: {
+        Row: {
+          created_at: string
+          id_exemplar: string
+          id_titulo: string
+          localizacao: string | null
+          seq: number
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          id_exemplar: string
+          id_titulo: string
+          localizacao?: string | null
+          seq: number
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          id_exemplar?: string
+          id_titulo?: string
+          localizacao?: string | null
+          seq?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'exemplar_id_titulo_fkey'
+            columns: ['id_titulo']
+            isOneToOne: false
+            referencedRelation: 'titulo'
+            referencedColumns: ['id_titulo']
+          },
+        ]
+      }
+      historico: {
+        Row: {
+          created_at: string
+          descricao: string
+          entidade_id: string
+          entidade_tipo: string
+          id: string
+          id_leitor: number | null
+          tipo: string
+          usuario_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          descricao: string
+          entidade_id: string
+          entidade_tipo: string
+          id?: string
+          id_leitor?: number | null
+          tipo: string
+          usuario_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          descricao?: string
+          entidade_id?: string
+          entidade_tipo?: string
+          id?: string
+          id_leitor?: number | null
+          tipo?: string
+          usuario_id?: string | null
+        }
+        Relationships: []
+      }
+      leitor: {
+        Row: {
+          bloqueado: boolean
+          cpf: string | null
+          created_at: string
+          data_cadastro: string
+          email: string
+          foto: string | null
+          id_auth: string | null
+          id_leitor: number
+          nome_do_leitor: string
+          telefone: string | null
+        }
+        Insert: {
+          bloqueado?: boolean
+          cpf?: string | null
+          created_at?: string
+          data_cadastro?: string
+          email: string
+          foto?: string | null
+          id_auth?: string | null
+          id_leitor?: never
+          nome_do_leitor: string
+          telefone?: string | null
+        }
+        Update: {
+          bloqueado?: boolean
+          cpf?: string | null
+          created_at?: string
+          data_cadastro?: string
+          email?: string
+          foto?: string | null
+          id_auth?: string | null
+          id_leitor?: never
+          nome_do_leitor?: string
+          telefone?: string | null
+        }
+        Relationships: []
+      }
+      parametros: {
+        Row: {
+          chave: string
+          descricao: string | null
+          id: string
+          updated_at: string
+          valor: string
+        }
+        Insert: {
+          chave: string
+          descricao?: string | null
+          id?: string
+          updated_at?: string
+          valor: string
+        }
+        Update: {
+          chave?: string
+          descricao?: string | null
+          id?: string
+          updated_at?: string
+          valor?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          bloqueado: boolean | null
+          created_at: string
+          email: string
+          full_name: string | null
+          id: string
+          nome: string | null
+          papel: string | null
+          role: string | null
+          telefone: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          bloqueado?: boolean | null
+          created_at?: string
+          email: string
+          full_name?: string | null
+          id: string
+          nome?: string | null
+          papel?: string | null
+          role?: string | null
+          telefone?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          bloqueado?: boolean | null
+          created_at?: string
+          email?: string
+          full_name?: string | null
+          id?: string
+          nome?: string | null
+          papel?: string | null
+          role?: string | null
+          telefone?: string | null
+        }
+        Relationships: []
+      }
+      reserva: {
+        Row: {
+          created_at: string
+          data_atendimento: string | null
+          data_reserva: string
+          id_leitor: number
+          id_reserva: number
+          id_titulo: string
+          status_reserva: string
+        }
+        Insert: {
+          created_at?: string
+          data_atendimento?: string | null
+          data_reserva?: string
+          id_leitor: number
+          id_reserva?: never
+          id_titulo: string
+          status_reserva?: string
+        }
+        Update: {
+          created_at?: string
+          data_atendimento?: string | null
+          data_reserva?: string
+          id_leitor?: number
+          id_reserva?: never
+          id_titulo?: string
+          status_reserva?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'reserva_id_leitor_fkey'
+            columns: ['id_leitor']
+            isOneToOne: false
+            referencedRelation: 'leitor'
+            referencedColumns: ['id_leitor']
+          },
+          {
+            foreignKeyName: 'reserva_id_titulo_fkey'
+            columns: ['id_titulo']
+            isOneToOne: false
+            referencedRelation: 'titulo'
+            referencedColumns: ['id_titulo']
+          },
+        ]
+      }
+      titulo: {
+        Row: {
+          ano_publicacao: number | null
+          ativo: boolean
+          autor: string
+          capa_url: string | null
+          categoria: string | null
+          created_at: string
+          editora: string | null
+          id_titulo: string
+          isbn: string | null
+          sinopse: string | null
+          titulo_de_livro: string
+          vol: number
+        }
+        Insert: {
+          ano_publicacao?: number | null
+          ativo?: boolean
+          autor: string
+          capa_url?: string | null
+          categoria?: string | null
+          created_at?: string
+          editora?: string | null
+          id_titulo: string
+          isbn?: string | null
+          sinopse?: string | null
+          titulo_de_livro: string
+          vol?: number
+        }
+        Update: {
+          ano_publicacao?: number | null
+          ativo?: boolean
+          autor?: string
+          capa_url?: string | null
+          categoria?: string | null
+          created_at?: string
+          editora?: string | null
+          id_titulo?: string
+          isbn?: string | null
+          sinopse?: string | null
+          titulo_de_livro?: string
+          vol?: number
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      admin_reset_password: {
+        Args: { new_password: string; target_user_id: string }
+        Returns: Json
+      }
+      atualizar_status_atrasos: { Args: never; Returns: number }
+      confirm_user_email: { Args: { user_id: string }; Returns: undefined }
+      current_profile: { Args: never; Returns: string }
+      dearmor: { Args: { '': string }; Returns: string }
+      delete_user: { Args: { target_user_id: string }; Returns: Json }
+      devolver_exemplar: {
+        Args: { p_id_exemplar: string; p_usuario_sistema?: string }
+        Returns: Json
+      }
+      emprestar_exemplar: {
+        Args: {
+          p_id_exemplar: string
+          p_id_leitor: number
+          p_usuario_sistema?: string
+        }
+        Returns: Json
+      }
+      gen_random_uuid: { Args: never; Returns: string }
+      gen_salt: { Args: { '': string }; Returns: string }
+      gerar_id_titulo: {
+        Args: { p_autor: string; p_titulo?: string }
+        Returns: string
+      }
+      get_current_user_papel: { Args: never; Returns: string }
+      pgp_armor_headers: {
+        Args: { '': string }
+        Returns: Record<string, unknown>[]
+      }
+      renovar_emprestimo: {
+        Args: { p_id_emprestimo: number; p_usuario_sistema?: string }
+        Returns: Json
+      }
+      update_user_info: {
+        Args: {
+          new_avatar_url?: string
+          new_email: string
+          new_name: string
+          new_role: string
+          new_telefone?: string
+          target_user_id: string
+        }
+        Returns: Json
+      }
+      verificar_atrasos_geral: { Args: never; Returns: number }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, 'public'>]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
+    ? (DefaultSchema['Tables'] & DefaultSchema['Views'])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema['Tables']
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
+    ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema['Tables']
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
+    ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema['Enums']
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums']
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums'][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema['Enums']
+    ? DefaultSchema['Enums'][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema['CompositeTypes']
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes']
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes'][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema['CompositeTypes']
+    ? DefaultSchema['CompositeTypes'][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const

@@ -1,0 +1,311 @@
+import { useState, useEffect } from 'react'
+import { useAuth } from '@/hooks/use-auth'
+import { ReservasService, ReservaDetailed } from '@/services/reservas'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  BookmarkCheck,
+  Check,
+  XCircle,
+  Clock,
+  Loader2,
+  Book,
+  User,
+  PlusCircle,
+  Calendar,
+} from 'lucide-react'
+import { ReserveModal } from '@/components/ReserveModal'
+import { ConfirmModal } from '@/components/ConfirmModal'
+import { useToast } from '@/hooks/use-toast'
+import { formatDate } from '@/lib/utils'
+
+export default function Reservas() {
+  const { isOperadorOrAdmin } = useAuth()
+  const { toast } = useToast()
+
+  const [reservas, setReservas] = useState<ReservaDetailed[]>([])
+  const [loading, setLoading] = useState(true)
+  const [statusTab, setStatusTab] = useState<string>('Ativa')
+  const [reserveModalOpen, setReserveModalOpen] = useState(false)
+  const [actionLoadingId, setActionLoadingId] = useState<number | null>(null)
+
+  // Confirm modals state
+  const [fulfillConfirmOpen, setFulfillConfirmOpen] = useState(false)
+  const [reservaToFulfill, setReservaToFulfill] = useState<ReservaDetailed | null>(null)
+
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  const [reservaToCancel, setReservaToCancel] = useState<ReservaDetailed | null>(null)
+
+  const loadReservas = async () => {
+    setLoading(true)
+    try {
+      const data = await ReservasService.getAll(statusTab)
+      setReservas(data)
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao carregar reservas',
+        description: err.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadReservas()
+  }, [statusTab])
+
+  const handleFulfill = (res: ReservaDetailed) => {
+    setReservaToFulfill(res)
+    setFulfillConfirmOpen(true)
+  }
+
+  const executeFulfill = async () => {
+    if (!reservaToFulfill) return
+    setActionLoadingId(reservaToFulfill.id_reserva)
+    try {
+      await ReservasService.fulfill(reservaToFulfill.id_reserva)
+      toast({
+        title: 'Reserva atendida',
+        description: 'Empréstimo gerado e registrado no histórico com sucesso.',
+      })
+      setFulfillConfirmOpen(false)
+      setReservaToFulfill(null)
+      loadReservas()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao atender reserva',
+        description: err.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
+
+  const handleCancel = (res: ReservaDetailed) => {
+    setReservaToCancel(res)
+    setCancelConfirmOpen(true)
+  }
+
+  const executeCancel = async () => {
+    if (!reservaToCancel) return
+    setActionLoadingId(reservaToCancel.id_reserva)
+    try {
+      await ReservasService.cancel(reservaToCancel.id_reserva)
+      toast({
+        title: 'Reserva cancelada',
+        description: 'A solicitação foi encerrada.',
+      })
+      setCancelConfirmOpen(false)
+      setReservaToCancel(null)
+      loadReservas()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao cancelar reserva',
+        description: err.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setActionLoadingId(null)
+    }
+  }
+
+  return (
+    <div className="space-y-6 pb-12">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <BookmarkCheck className="w-6 h-6 text-emerald-600" />
+            Fila de Espera & Reservas
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+            Gerenciamento de solicitações de reserva para obras com todos os exemplares emprestados.
+          </p>
+        </div>
+
+        <Button
+          onClick={() => setReserveModalOpen(true)}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium gap-2 shadow-sm"
+        >
+          <PlusCircle className="w-4 h-4" />
+          Nova Reserva
+        </Button>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={statusTab} onValueChange={setStatusTab} className="w-full">
+        <TabsList className="grid grid-cols-4 w-full sm:w-96 bg-slate-100 p-1">
+          <TabsTrigger value="Ativa" className="text-xs font-semibold">
+            Ativas na Fila
+          </TabsTrigger>
+          <TabsTrigger value="Atendida" className="text-xs font-semibold">
+            Atendidas
+          </TabsTrigger>
+          <TabsTrigger value="Cancelada" className="text-xs font-semibold">
+            Canceladas
+          </TabsTrigger>
+          <TabsTrigger value="all" className="text-xs font-semibold">
+            Todas
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {/* List of reservations */}
+      {loading ? (
+        <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+          <p className="text-xs text-slate-500 font-medium">Buscando lista de reservas...</p>
+        </div>
+      ) : reservas.length === 0 ? (
+        <Card className="border-dashed border-2 border-slate-200 p-12 text-center bg-slate-50/50">
+          <div className="max-w-md mx-auto space-y-3">
+            <BookmarkCheck className="w-12 h-12 text-slate-300 mx-auto" />
+            <h3 className="text-base font-semibold text-slate-800">Nenhuma reserva encontrada</h3>
+            <p className="text-xs text-slate-500">
+              Não constam solicitações para a categoria selecionada.
+            </p>
+          </div>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {reservas.map((res) => {
+            const isLoadingThis = actionLoadingId === res.id_reserva
+            return (
+              <Card
+                key={res.id_reserva}
+                className="border-slate-200 bg-white hover:border-emerald-300 transition-all shadow-sm"
+              >
+                <div className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded border">
+                        Reserva #{res.id_reserva}
+                      </span>
+                      {res.status_reserva === 'Ativa' && (
+                        <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 gap-1 select-none pointer-events-none">
+                          <Clock className="w-3 h-3 text-amber-600" />
+                          Aguardando Disponibilidade
+                        </span>
+                      )}
+                      {res.status_reserva === 'Atendida' && (
+                        <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-800 gap-1 select-none pointer-events-none">
+                          <Check className="w-3 h-3 text-emerald-600" />
+                          Atendida em {formatDate(res.data_atendimento)}
+                        </span>
+                      )}
+                      {res.status_reserva === 'Cancelada' && (
+                        <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 select-none pointer-events-none">
+                          Cancelada
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      <div className="flex items-start gap-2">
+                        <Book className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 leading-snug">
+                            {res.titulo?.titulo_de_livro}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {res.titulo?.autor} • Código: {res.id_titulo}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2">
+                        <User className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 leading-snug">
+                            {res.leitor?.nome_do_leitor}
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            {res.leitor?.email}{' '}
+                            {res.leitor?.telefone ? `• ${res.leitor?.telefone}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dates & Actions */}
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between gap-3 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                    <div className="text-[11px] text-slate-500 flex items-center gap-1">
+                      <Calendar className="w-3 h-3 text-slate-400" />
+                      Solicitado em:{' '}
+                      <span className="font-semibold text-slate-700">
+                        {formatDate(res.data_reserva)}
+                      </span>
+                    </div>
+
+                    {res.status_reserva === 'Ativa' && isOperadorOrAdmin && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isLoadingThis}
+                          onClick={() => handleCancel(res)}
+                          className="h-8 text-xs border-slate-200 text-slate-600 hover:bg-slate-100 gap-1"
+                        >
+                          <XCircle className="w-3.5 h-3.5" />
+                          Cancelar
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={isLoadingThis}
+                          onClick={() => handleFulfill(res)}
+                          className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium gap-1 shadow-sm"
+                        >
+                          {isLoadingThis ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Check className="w-3.5 h-3.5" />
+                          )}
+                          Atender Reserva
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Modals */}
+      <ReserveModal
+        open={reserveModalOpen}
+        onOpenChange={setReserveModalOpen}
+        onSuccess={loadReservas}
+      />
+
+      <ConfirmModal
+        open={fulfillConfirmOpen}
+        onOpenChange={setFulfillConfirmOpen}
+        title="Atender Reserva"
+        description={`Deseja marcar a reserva #${reservaToFulfill?.id_reserva} do livro "${reservaToFulfill?.titulo?.titulo_de_livro}" para o leitor ${reservaToFulfill?.leitor?.nome_do_leitor} como atendida?`}
+        confirmLabel="Confirmar Atendimento"
+        variant="primary"
+        loading={actionLoadingId === reservaToFulfill?.id_reserva}
+        onConfirm={executeFulfill}
+      />
+
+      <ConfirmModal
+        open={cancelConfirmOpen}
+        onOpenChange={setCancelConfirmOpen}
+        title="Cancelar Reserva"
+        description={`Deseja realmente cancelar a reserva #${reservaToCancel?.id_reserva} do livro "${reservaToCancel?.titulo?.titulo_de_livro}" para ${reservaToCancel?.leitor?.nome_do_leitor}?`}
+        confirmLabel="Sim, Cancelar Reserva"
+        variant="destructive"
+        loading={actionLoadingId === reservaToCancel?.id_reserva}
+        onConfirm={executeCancel}
+      />
+    </div>
+  )
+}
