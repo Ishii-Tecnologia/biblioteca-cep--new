@@ -360,7 +360,13 @@ export function ReaderModal({ open, onOpenChange, readerToEdit, onSuccess }: Rea
             </div>
 
             {readerToEdit && (
-              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <div
+                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border transition-colors ${
+                  formData.bloqueado
+                    ? 'bg-rose-50/50 border-rose-200'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
                 <div className="space-y-0.5">
                   <Label className="text-xs font-semibold text-slate-800">
                     Bloquear Empréstimos
@@ -369,10 +375,25 @@ export function ReaderModal({ open, onOpenChange, readerToEdit, onSuccess }: Rea
                     Impede o leitor de solicitar novos livros por pendências
                   </p>
                 </div>
-                <Switch
-                  checked={formData.bloqueado}
-                  onCheckedChange={(checked) => setFormData({ ...formData, bloqueado: checked })}
-                />
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setFormData({ ...formData, bloqueado: !formData.bloqueado })}
+                    className={`h-8 text-xs font-semibold transition-colors gap-1.5 shadow-xs ${
+                      formData.bloqueado
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                        : 'bg-slate-700 hover:bg-slate-800 text-white'
+                    }`}
+                  >
+                    {formData.bloqueado ? 'Empréstimos Bloqueados' : 'Bloquear Empréstimos'}
+                  </Button>
+                  <Switch
+                    checked={formData.bloqueado}
+                    onCheckedChange={(checked) => setFormData({ ...formData, bloqueado: checked })}
+                    className="data-[state=checked]:bg-rose-600 data-[state=unchecked]:bg-slate-700"
+                  />
+                </div>
               </div>
             )}
           </div>

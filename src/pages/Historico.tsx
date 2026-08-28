@@ -471,6 +471,290 @@ export default function Historico() {
     printWindow.document.close()
   }
 
+  // Print/Export PDF function for Logs de Auditoria
+  const handlePrintLogs = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast({
+        title: 'Bloqueio de pop-up detectado',
+        description: 'Permita pop-ups no seu navegador para imprimir ou gerar PDF.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const rowsHtml = filteredLogs
+      .map(
+        (l) => `
+      <tr>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace; white-space: nowrap;">${formatDateTime(l.data_hora)}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">${l.tipo_operacao}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${l.id_exemplar ? `${l.id_exemplar}` : '-'}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${l.leitor?.nome_do_leitor || (l.id_leitor ? `#${l.id_leitor}` : '-')}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">${l.usuario_sistema || 'Sistema'}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; color: #475569;">${l.detalhes || '-'}</td>
+      </tr>
+    `,
+      )
+      .join('')
+
+    const dateToday = formatDate(new Date())
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Relatório de Logs e Auditoria - Biblioteca CEP</title>
+          <style>
+            @media print {
+              @page { size: landscape; margin: 12mm; }
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 12px; color: #1e293b; margin: 20px; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #059669; padding-bottom: 10px; margin-bottom: 15px; }
+            .title { font-size: 18px; font-weight: bold; color: #065f46; margin: 0; }
+            .subtitle { font-size: 11px; color: #64748b; margin-top: 4px; }
+            .meta { text-align: right; font-size: 11px; color: #64748b; }
+            table { width: 100%; border-collapse: collapse; text-align: left; }
+            th { background-color: #f8fafc; padding: 8px; border-bottom: 2px solid #cbd5e1; font-weight: 600; color: #475569; font-size: 11px; text-transform: uppercase; }
+            .summary { margin-top: 15px; padding: 10px; background-color: #f1f5f9; border-radius: 6px; font-size: 11px; display: flex; justify-content: space-between; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">Biblioteca CEP - Relatório de Auditoria (Logs)</h1>
+              <div class="subtitle">Histórico cronológico de operações e eventos do sistema</div>
+            </div>
+            <div class="meta">
+              <div><strong>Data de Emissão:</strong> ${dateToday}</div>
+              <div><strong>Total de Registros:</strong> ${filteredLogs.length}</div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Data / Hora</th>
+                <th>Operação</th>
+                <th>Exemplar</th>
+                <th>Leitor</th>
+                <th>Operador</th>
+                <th>Detalhes</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || '<tr><td colspan="6" style="text-align: center; padding: 20px;">Nenhum registro de auditoria encontrado.</td></tr>'}
+            </tbody>
+          </table>
+          <div class="summary">
+            <div>Filtro de Operação: <strong>${tipoFiltroLogs === 'todos' ? 'Todos os tipos' : tipoFiltroLogs}</strong></div>
+            <div>Documento gerado pelo sistema Biblioteca CEP</div>
+          </div>
+          <script>
+            window.onload = function() { window.focus(); window.print(); };
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
+
+  // Print/Export PDF function for Títulos e Exemplares
+  const handlePrintTitulos = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast({
+        title: 'Bloqueio de pop-up detectado',
+        description: 'Permita pop-ups no seu navegador para imprimir ou gerar PDF.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const rowsHtml = filteredTitulos
+      .map((t) => {
+        const exemplares = t.exemplar || []
+        const exemplaresFormatted = exemplares.length
+          ? exemplares
+              .map(
+                (e: any) =>
+                  `<span style="display: inline-block; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 3px; padding: 1px 5px; margin: 2px; font-family: monospace; font-size: 10px;">${e.id_exemplar} (${e.status})</span>`,
+              )
+              .join(' ')
+          : '<em style="color: #94a3b8;">Nenhum</em>'
+
+        return `
+        <tr>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${t.id_titulo}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${t.titulo_de_livro}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${t.autor || '-'}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${t.categoria || '-'}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${t.editora || '-'}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: bold;">${exemplares.length}</td>
+          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${exemplaresFormatted}</td>
+        </tr>
+      `
+      })
+      .join('')
+
+    const dateToday = formatDate(new Date())
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Relatório de Títulos e Exemplares - Biblioteca CEP</title>
+          <style>
+            @media print {
+              @page { size: landscape; margin: 12mm; }
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 12px; color: #1e293b; margin: 20px; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #059669; padding-bottom: 10px; margin-bottom: 15px; }
+            .title { font-size: 18px; font-weight: bold; color: #065f46; margin: 0; }
+            .subtitle { font-size: 11px; color: #64748b; margin-top: 4px; }
+            .meta { text-align: right; font-size: 11px; color: #64748b; }
+            table { width: 100%; border-collapse: collapse; text-align: left; }
+            th { background-color: #f8fafc; padding: 8px; border-bottom: 2px solid #cbd5e1; font-weight: 600; color: #475569; font-size: 11px; text-transform: uppercase; }
+            .summary { margin-top: 15px; padding: 10px; background-color: #f1f5f9; border-radius: 6px; font-size: 11px; display: flex; justify-content: space-between; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">Biblioteca CEP - Relatório de Títulos e Exemplares</h1>
+              <div class="subtitle">Catálogo de obras registradas e detalhamento dos exemplares físicos</div>
+            </div>
+            <div class="meta">
+              <div><strong>Data de Emissão:</strong> ${dateToday}</div>
+              <div><strong>Total de Títulos:</strong> ${filteredTitulos.length}</div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Título</th>
+                <th>Autor</th>
+                <th>Categoria</th>
+                <th>Editora</th>
+                <th style="text-align: center;">Exemplares</th>
+                <th>Códigos / Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || '<tr><td colspan="7" style="text-align: center; padding: 20px;">Nenhum título encontrado.</td></tr>'}
+            </tbody>
+          </table>
+          <div class="summary">
+            <div>Filtro de Categoria: <strong>${categoryTitulosFilter === 'all' ? 'Todas as Categorias' : categoryTitulosFilter}</strong></div>
+            <div>Documento gerado pelo sistema Biblioteca CEP</div>
+          </div>
+          <script>
+            window.onload = function() { window.focus(); window.print(); };
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
+
+  // Print/Export PDF function for Usuários
+  const handlePrintUsuarios = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast({
+        title: 'Bloqueio de pop-up detectado',
+        description: 'Permita pop-ups no seu navegador para imprimir ou gerar PDF.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const rowsHtml = filteredUsuarios
+      .map(
+        (u) => `
+      <tr>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${u.full_name || u.nome || 'Sem nome'}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${u.email || '-'}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${u.phone || u.telefone ? formatPhone(u.phone || u.telefone) : '-'}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">
+          <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: ${u.role === 'admin' ? '#f3e8ff; color: #6b21a8;' : '#e0e7ff; color: #3730a3;'}">
+            ${u.role === 'admin' ? 'Administrador' : 'Operador'}
+          </span>
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">
+          <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: ${u.status === 'inativo' || u.bloqueado ? '#fee2e2; color: #991b1b;' : '#dcfce7; color: #166534;'}">
+            ${u.status === 'inativo' || u.bloqueado ? 'Inativo' : 'Ativo'}
+          </span>
+        </td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace; text-align: center;">${formatDate(u.created_at)}</td>
+      </tr>
+    `,
+      )
+      .join('')
+
+    const dateToday = formatDate(new Date())
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Relatório de Usuários - Biblioteca CEP</title>
+          <style>
+            @media print {
+              @page { size: portrait; margin: 12mm; }
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 12px; color: #1e293b; margin: 20px; }
+            .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #059669; padding-bottom: 10px; margin-bottom: 15px; }
+            .title { font-size: 18px; font-weight: bold; color: #065f46; margin: 0; }
+            .subtitle { font-size: 11px; color: #64748b; margin-top: 4px; }
+            .meta { text-align: right; font-size: 11px; color: #64748b; }
+            table { width: 100%; border-collapse: collapse; text-align: left; }
+            th { background-color: #f8fafc; padding: 8px; border-bottom: 2px solid #cbd5e1; font-weight: 600; color: #475569; font-size: 11px; text-transform: uppercase; }
+            .summary { margin-top: 15px; padding: 10px; background-color: #f1f5f9; border-radius: 6px; font-size: 11px; display: flex; justify-content: space-between; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">Biblioteca CEP - Relatório de Usuários</h1>
+              <div class="subtitle">Listagem de operadores e administradores do sistema</div>
+            </div>
+            <div class="meta">
+              <div><strong>Data de Emissão:</strong> ${dateToday}</div>
+              <div><strong>Total de Usuários:</strong> ${filteredUsuarios.length}</div>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>E-mail</th>
+                <th>Telefone</th>
+                <th>Papel</th>
+                <th>Status</th>
+                <th style="text-align: center;">Data de Cadastro</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || '<tr><td colspan="6" style="text-align: center; padding: 20px;">Nenhum usuário encontrado.</td></tr>'}
+            </tbody>
+          </table>
+          <div class="summary">
+            <div>Filtro de Papel: <strong>${roleUsuariosFilter === 'all' ? 'Todos os Papéis' : roleUsuariosFilter === 'admin' ? 'Administrador' : 'Operador'}</strong></div>
+            <div>Documento gerado pelo sistema Biblioteca CEP</div>
+          </div>
+          <script>
+            window.onload = function() { window.focus(); window.print(); };
+          </script>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+  }
+
   // Export logs CSV
   const handleExportLogs = () => {
     const exportData = filteredLogs.map((l) => ({
@@ -866,6 +1150,10 @@ export default function Historico() {
                     <Download className="h-4 w-4" />
                     Exportar CSV
                   </Button>
+                  <Button variant="outline" size="sm" onClick={handlePrintLogs} className="gap-1.5">
+                    <Printer className="h-4 w-4" />
+                    Imprimir / PDF
+                  </Button>
                   {isAdmin && (
                     <Button
                       variant="destructive"
@@ -1009,7 +1297,7 @@ export default function Historico() {
                     exemplares e códigos.
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1018,6 +1306,15 @@ export default function Historico() {
                   >
                     <Download className="h-4 w-4" />
                     Exportar CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePrintTitulos}
+                    className="gap-1.5"
+                  >
+                    <Printer className="h-4 w-4" />
+                    Imprimir / PDF
                   </Button>
                 </div>
               </div>
@@ -1185,7 +1482,7 @@ export default function Historico() {
                     (dd/mm/yy).
                   </CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1194,6 +1491,15 @@ export default function Historico() {
                   >
                     <Download className="h-4 w-4" />
                     Exportar CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePrintUsuarios}
+                    className="gap-1.5"
+                  >
+                    <Printer className="h-4 w-4" />
+                    Imprimir / PDF
                   </Button>
                 </div>
               </div>
