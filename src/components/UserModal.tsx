@@ -209,8 +209,6 @@ export function UserModal({ open, onOpenChange, onSuccess }: UserModalProps) {
         if (profileError) {
           console.warn('Erro ao atualizar perfil na tabela profiles:', profileError)
         }
-
-
       }
 
       toast({

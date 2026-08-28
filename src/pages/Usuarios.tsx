@@ -119,10 +119,7 @@ export default function Usuarios() {
     setEditModalOpen(true)
   }
 
-  const handleUpdateRole = async (
-    profile: ProfileRecord,
-    newRole: 'admin' | 'operador',
-  ) => {
+  const handleUpdateRole = async (profile: ProfileRecord, newRole: 'admin' | 'operador') => {
     const currentPapel = profile.papel || profile.role || 'operador'
     if (currentPapel === newRole) return
 
@@ -291,8 +288,8 @@ export default function Usuarios() {
             Controle de Usuários
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Gerencie permissões de acesso, papéis (Administrador e Operador) e status de bloqueio dos
-            usuários cadastrados.
+            Gerencie permissões de acesso, papéis (Administrador e Operador) e status de bloqueio
+            dos usuários cadastrados.
           </p>
         </div>
         <div className="flex items-center gap-2 self-start sm:self-auto">
