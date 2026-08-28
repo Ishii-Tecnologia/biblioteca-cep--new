@@ -307,8 +307,8 @@ export const HistoricoService = {
     return data
   },
 
-  async getTitulosComExemplares() {
-    const { data, error } = await supabase
+  async getTitulosComExemplares(dataInicio?: string, dataFim?: string) {
+    let query = supabase
       .from('titulo')
       .select(`
         id_titulo,
@@ -317,14 +317,26 @@ export const HistoricoService = {
         categoria,
         editora,
         ativo,
+        created_at,
         exemplar(
           id_exemplar,
           seq,
           status,
-          localizacao
+          localizacao,
+          created_at
         )
       `)
       .order('titulo_de_livro', { ascending: true })
+
+    if (dataInicio && dataInicio.trim()) {
+      query = query.gte('created_at', `${dataInicio.trim()}T00:00:00`)
+    }
+
+    if (dataFim && dataFim.trim()) {
+      query = query.lte('created_at', `${dataFim.trim()}T23:59:59.999Z`)
+    }
+
+    const { data, error } = await query
 
     if (error) throw error
     return data || []

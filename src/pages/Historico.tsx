@@ -24,7 +24,14 @@ import {
   Lock,
   Repeat,
   Printer,
+  SlidersHorizontal,
+  CheckSquare,
+  Square,
+  BarChart2,
+  Bookmark,
 } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -90,6 +97,8 @@ export default function Historico() {
   const [loadingTitulos, setLoadingTitulos] = useState(false)
   const [searchTitulos, setSearchTitulos] = useState('')
   const [categoryTitulosFilter, setCategoryTitulosFilter] = useState('all')
+  const [dataInicioTitulos, setDataInicioTitulos] = useState('')
+  const [dataFimTitulos, setDataFimTitulos] = useState('')
 
   // --- ABA 3: USUÁRIOS ---
   const [usuariosList, setUsuariosList] = useState<any[]>([])
@@ -104,6 +113,56 @@ export default function Historico() {
   const [dataFimMov, setDataFimMov] = useState('')
   const [tipoMovFilter, setTipoMovFilter] = useState('all')
   const [searchMov, setSearchMov] = useState('')
+
+  // --- SELEÇÃO DE COLUNAS PARA IMPRESSÃO / PDF ---
+  const [colsLogs, setColsLogs] = useState({
+    data_hora: true,
+    operacao: true,
+    exemplar: true,
+    leitor: true,
+    operador: true,
+    detalhes: true,
+  })
+
+  const [colsLeitores, setColsLeitores] = useState({
+    id: true,
+    nome: true,
+    cpf: true,
+    email: true,
+    telefone: true,
+    status: true,
+    emprestimos: true,
+    data_cadastro: true,
+  })
+
+  const [colsTitulos, setColsTitulos] = useState({
+    codigo: true,
+    titulo: true,
+    autor: true,
+    categoria: true,
+    editora: true,
+    total_exemplares: true,
+    detalhes_exemplares: true,
+  })
+
+  const [colsUsuarios, setColsUsuarios] = useState({
+    nome: true,
+    email: true,
+    telefone: true,
+    papel: true,
+    status: true,
+    data_cadastro: true,
+  })
+
+  const [colsMovimentacoes, setColsMovimentacoes] = useState({
+    tipo: true,
+    data_evento: true,
+    titulo_livro: true,
+    exemplar: true,
+    leitor: true,
+    status: true,
+    detalhes: true,
+  })
 
   // Check admin
   const isAdmin = profile?.role === 'admin'
@@ -151,7 +210,10 @@ export default function Historico() {
   const fetchTitulos = async () => {
     try {
       setLoadingTitulos(true)
-      const data = await HistoricoService.getTitulosComExemplares()
+      const data = await HistoricoService.getTitulosComExemplares(
+        dataInicioTitulos || undefined,
+        dataFimTitulos || undefined,
+      )
       setTitulosList(data)
     } catch (err: any) {
       toast({
@@ -208,7 +270,7 @@ export default function Historico() {
   useEffect(() => {
     if (activeTab === 'leitores' && leitoresList.length === 0) {
       fetchLeitores()
-    } else if (activeTab === 'titulos' && titulosList.length === 0) {
+    } else if (activeTab === 'titulos') {
       fetchTitulos()
     } else if (activeTab === 'usuarios' && usuariosList.length === 0) {
       fetchUsuarios()
@@ -352,6 +414,25 @@ export default function Historico() {
     document.body.removeChild(link)
   }
 
+  // Resumo de exemplares agrupado por categoria
+  const categoryStats = (() => {
+    const stats: Record<string, { titulos: number; exemplares: number }> = {}
+    filteredTitulos.forEach((t) => {
+      const cat = t.categoria || 'Sem categoria'
+      if (!stats[cat]) {
+        stats[cat] = { titulos: 0, exemplares: 0 }
+      }
+      stats[cat].titulos += 1
+      stats[cat].exemplares += (t.exemplar || []).length
+    })
+    return Object.entries(stats).sort((a, b) => b[1].exemplares - a[1].exemplares)
+  })()
+
+  const totalExemplaresGeral = filteredTitulos.reduce(
+    (acc, t) => acc + (t.exemplar || []).length,
+    0,
+  )
+
   // Export leitores CSV
   const handleExportLeitores = () => {
     const exportData = filteredLeitores.map((l) => ({
@@ -381,28 +462,71 @@ export default function Historico() {
       return
     }
 
+    const visibleColsCount = Object.values(colsLeitores).filter(Boolean).length || 1
+
+    const ths: string[] = []
+    if (colsLeitores.id) ths.push('<th>ID</th>')
+    if (colsLeitores.nome) ths.push('<th>Nome</th>')
+    if (colsLeitores.cpf) ths.push('<th>CPF</th>')
+    if (colsLeitores.email) ths.push('<th>E-mail</th>')
+    if (colsLeitores.telefone) ths.push('<th>Telefone</th>')
+    if (colsLeitores.status) ths.push('<th>Status</th>')
+    if (colsLeitores.emprestimos)
+      ths.push('<th style="text-align: center;">Empréstimos (Ativos / Total)</th>')
+    if (colsLeitores.data_cadastro) ths.push('<th style="text-align: center;">Data Cadastro</th>')
+
     const rowsHtml = filteredLeitores
-      .map(
-        (l) => `
-      <tr>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">#${l.id_leitor}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${l.nome_do_leitor || 'Sem nome'}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${l.cpf ? formatCPF(l.cpf) : '-'}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${l.email || '-'}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${l.telefone ? formatPhone(l.telefone) : '-'}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">
-          <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: ${l.bloqueado ? '#fee2e2; color: #991b1b;' : '#dcfce7; color: #166534;'}">
-            ${l.bloqueado ? 'Bloqueado' : 'Ativo'}
-          </span>
-        </td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: center;">
-          <strong>${l.emprestimos_ativos || 0}</strong> ativo(s) / <strong>${l.total_emprestimos || 0}</strong> total
-          ${l.emprestimos_atrasados > 0 ? `<br><span style="color: #e11d48; font-size: 10px; font-weight: bold;">(${l.emprestimos_atrasados} atrasado)</span>` : ''}
-        </td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace; text-align: center;">${formatDate(l.data_cadastro || l.created_at)}</td>
-      </tr>
-    `,
-      )
+      .map((l) => {
+        const tds: string[] = []
+        if (colsLeitores.id) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">#${l.id_leitor}</td>`,
+          )
+        }
+        if (colsLeitores.nome) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${l.nome_do_leitor || 'Sem nome'}</td>`,
+          )
+        }
+        if (colsLeitores.cpf) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${l.cpf ? formatCPF(l.cpf) : '-'}</td>`,
+          )
+        }
+        if (colsLeitores.email) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${l.email || '-'}</td>`,
+          )
+        }
+        if (colsLeitores.telefone) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${l.telefone ? formatPhone(l.telefone) : '-'}</td>`,
+          )
+        }
+        if (colsLeitores.status) {
+          tds.push(`
+            <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">
+              <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: ${l.bloqueado ? '#fee2e2; color: #991b1b;' : '#dcfce7; color: #166534;'}">
+                ${l.bloqueado ? 'Bloqueado' : 'Ativo'}
+              </span>
+            </td>
+          `)
+        }
+        if (colsLeitores.emprestimos) {
+          tds.push(`
+            <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: center;">
+              <strong>${l.emprestimos_ativos || 0}</strong> ativo(s) / <strong>${l.total_emprestimos || 0}</strong> total
+              ${l.emprestimos_atrasados > 0 ? `<br><span style="color: #e11d48; font-size: 10px; font-weight: bold;">(${l.emprestimos_atrasados} atrasado)</span>` : ''}
+            </td>
+          `)
+        }
+        if (colsLeitores.data_cadastro) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace; text-align: center;">${formatDate(l.data_cadastro || l.created_at)}</td>`,
+          )
+        }
+        return `<tr>${tds.join('')}</tr>`
+      })
       .join('')
 
     const dateToday = formatDate(new Date())
@@ -441,18 +565,11 @@ export default function Historico() {
           <table>
             <thead>
               <tr>
-                <th>ID</th>
-                <th>Nome</th>
-                <th>CPF</th>
-                <th>E-mail</th>
-                <th>Telefone</th>
-                <th>Status</th>
-                <th style="text-align: center;">Empréstimos (Ativos / Total)</th>
-                <th style="text-align: center;">Data Cadastro</th>
+                ${ths.join('')}
               </tr>
             </thead>
             <tbody>
-              ${rowsHtml || '<tr><td colspan="8" style="text-align: center; padding: 20px;">Nenhum leitor encontrado.</td></tr>'}
+              ${rowsHtml || `<tr><td colspan="${visibleColsCount}" style="text-align: center; padding: 20px;">Nenhum leitor encontrado.</td></tr>`}
             </tbody>
           </table>
           <div class="summary">
@@ -483,19 +600,51 @@ export default function Historico() {
       return
     }
 
+    const visibleColsCount = Object.values(colsLogs).filter(Boolean).length || 1
+
+    const ths: string[] = []
+    if (colsLogs.data_hora) ths.push('<th>Data / Hora</th>')
+    if (colsLogs.operacao) ths.push('<th>Operação</th>')
+    if (colsLogs.exemplar) ths.push('<th>Exemplar</th>')
+    if (colsLogs.leitor) ths.push('<th>Leitor</th>')
+    if (colsLogs.operador) ths.push('<th>Operador</th>')
+    if (colsLogs.detalhes) ths.push('<th>Detalhes</th>')
+
     const rowsHtml = filteredLogs
-      .map(
-        (l) => `
-      <tr>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace; white-space: nowrap;">${formatDateTime(l.data_hora)}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">${l.tipo_operacao}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${l.id_exemplar ? `${l.id_exemplar}` : '-'}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${l.leitor?.nome_do_leitor || (l.id_leitor ? `#${l.id_leitor}` : '-')}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">${l.usuario_sistema || 'Sistema'}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; color: #475569;">${l.detalhes || '-'}</td>
-      </tr>
-    `,
-      )
+      .map((l) => {
+        const tds: string[] = []
+        if (colsLogs.data_hora) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace; white-space: nowrap;">${formatDateTime(l.data_hora)}</td>`,
+          )
+        }
+        if (colsLogs.operacao) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">${l.tipo_operacao}</td>`,
+          )
+        }
+        if (colsLogs.exemplar) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${l.id_exemplar ? `${l.id_exemplar}` : '-'}</td>`,
+          )
+        }
+        if (colsLogs.leitor) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${l.leitor?.nome_do_leitor || (l.id_leitor ? `#${l.id_leitor}` : '-')}</td>`,
+          )
+        }
+        if (colsLogs.operador) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">${l.usuario_sistema || 'Sistema'}</td>`,
+          )
+        }
+        if (colsLogs.detalhes) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; color: #475569;">${l.detalhes || '-'}</td>`,
+          )
+        }
+        return `<tr>${tds.join('')}</tr>`
+      })
       .join('')
 
     const dateToday = formatDate(new Date())
@@ -534,16 +683,11 @@ export default function Historico() {
           <table>
             <thead>
               <tr>
-                <th>Data / Hora</th>
-                <th>Operação</th>
-                <th>Exemplar</th>
-                <th>Leitor</th>
-                <th>Operador</th>
-                <th>Detalhes</th>
+                ${ths.join('')}
               </tr>
             </thead>
             <tbody>
-              ${rowsHtml || '<tr><td colspan="6" style="text-align: center; padding: 20px;">Nenhum registro de auditoria encontrado.</td></tr>'}
+              ${rowsHtml || `<tr><td colspan="${visibleColsCount}" style="text-align: center; padding: 20px;">Nenhum registro de auditoria encontrado.</td></tr>`}
             </tbody>
           </table>
           <div class="summary">
@@ -571,6 +715,17 @@ export default function Historico() {
       return
     }
 
+    const visibleColsCount = Object.values(colsTitulos).filter(Boolean).length || 1
+
+    const ths: string[] = []
+    if (colsTitulos.codigo) ths.push('<th>Código</th>')
+    if (colsTitulos.titulo) ths.push('<th>Título</th>')
+    if (colsTitulos.autor) ths.push('<th>Autor</th>')
+    if (colsTitulos.categoria) ths.push('<th>Categoria</th>')
+    if (colsTitulos.editora) ths.push('<th>Editora</th>')
+    if (colsTitulos.total_exemplares) ths.push('<th style="text-align: center;">Exemplares</th>')
+    if (colsTitulos.detalhes_exemplares) ths.push('<th>Códigos / Status</th>')
+
     const rowsHtml = filteredTitulos
       .map((t) => {
         const exemplares = t.exemplar || []
@@ -583,21 +738,65 @@ export default function Historico() {
               .join(' ')
           : '<em style="color: #94a3b8;">Nenhum</em>'
 
-        return `
-        <tr>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${t.id_titulo}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${t.titulo_de_livro}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${t.autor || '-'}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${t.categoria || '-'}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${t.editora || '-'}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: bold;">${exemplares.length}</td>
-          <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${exemplaresFormatted}</td>
-        </tr>
-      `
+        const tds: string[] = []
+        if (colsTitulos.codigo) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${t.id_titulo}</td>`,
+          )
+        }
+        if (colsTitulos.titulo) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${t.titulo_de_livro}</td>`,
+          )
+        }
+        if (colsTitulos.autor) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${t.autor || '-'}</td>`,
+          )
+        }
+        if (colsTitulos.categoria) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${t.categoria || '-'}</td>`,
+          )
+        }
+        if (colsTitulos.editora) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${t.editora || '-'}</td>`,
+          )
+        }
+        if (colsTitulos.total_exemplares) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: bold;">${exemplares.length}</td>`,
+          )
+        }
+        if (colsTitulos.detalhes_exemplares) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${exemplaresFormatted}</td>`,
+          )
+        }
+        return `<tr>${tds.join('')}</tr>`
       })
       .join('')
 
+    // Tabela de resumo por categoria para impressão
+    const categoryStatsRowsHtml = categoryStats
+      .map(
+        ([cat, data]) => `
+      <tr>
+        <td style="padding: 4px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">${cat}</td>
+        <td style="padding: 4px 8px; border-bottom: 1px solid #e2e8f0; text-align: center;">${data.titulos}</td>
+        <td style="padding: 4px 8px; border-bottom: 1px solid #e2e8f0; text-align: center; font-weight: bold; color: #065f46;">${data.exemplares}</td>
+      </tr>
+    `,
+      )
+      .join('')
+
     const dateToday = formatDate(new Date())
+
+    const periodText =
+      dataInicioTitulos || dataFimTitulos
+        ? `Período: ${dataInicioTitulos ? formatDate(dataInicioTitulos) : 'Início'} até ${dataFimTitulos ? formatDate(dataFimTitulos) : 'Atual'}`
+        : 'Todos os períodos'
 
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -614,40 +813,61 @@ export default function Historico() {
             .title { font-size: 18px; font-weight: bold; color: #065f46; margin: 0; }
             .subtitle { font-size: 11px; color: #64748b; margin-top: 4px; }
             .meta { text-align: right; font-size: 11px; color: #64748b; }
-            table { width: 100%; border-collapse: collapse; text-align: left; }
+            table { width: 100%; border-collapse: collapse; text-align: left; margin-bottom: 15px; }
             th { background-color: #f8fafc; padding: 8px; border-bottom: 2px solid #cbd5e1; font-weight: 600; color: #475569; font-size: 11px; text-transform: uppercase; }
-            .summary { margin-top: 15px; padding: 10px; background-color: #f1f5f9; border-radius: 6px; font-size: 11px; display: flex; justify-content: space-between; }
+            .summary-box { display: flex; gap: 20px; margin-top: 15px; page-break-inside: avoid; }
+            .category-card { flex: 1; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; background-color: #f8fafc; }
+            .category-card h3 { margin: 0 0 8px 0; font-size: 13px; color: #065f46; }
+            .footer { margin-top: 15px; padding: 10px; background-color: #f1f5f9; border-radius: 6px; font-size: 11px; display: flex; justify-content: space-between; }
           </style>
         </head>
         <body>
           <div class="header">
             <div>
               <h1 class="title">Biblioteca CEP - Relatório de Títulos e Exemplares</h1>
-              <div class="subtitle">Catálogo de obras registradas e detalhamento dos exemplares físicos</div>
+              <div class="subtitle">Catálogo de obras registradas, total de exemplares por categoria e detalhamento físico</div>
             </div>
             <div class="meta">
               <div><strong>Data de Emissão:</strong> ${dateToday}</div>
-              <div><strong>Total de Títulos:</strong> ${filteredTitulos.length}</div>
+              <div><strong>Total de Títulos:</strong> ${filteredTitulos.length} | <strong>Total de Exemplares:</strong> ${totalExemplaresGeral}</div>
             </div>
           </div>
+
           <table>
             <thead>
               <tr>
-                <th>Código</th>
-                <th>Título</th>
-                <th>Autor</th>
-                <th>Categoria</th>
-                <th>Editora</th>
-                <th style="text-align: center;">Exemplares</th>
-                <th>Códigos / Status</th>
+                ${ths.join('')}
               </tr>
             </thead>
             <tbody>
-              ${rowsHtml || '<tr><td colspan="7" style="text-align: center; padding: 20px;">Nenhum título encontrado.</td></tr>'}
+              ${rowsHtml || `<tr><td colspan="${visibleColsCount}" style="text-align: center; padding: 20px;">Nenhum título encontrado.</td></tr>`}
             </tbody>
           </table>
-          <div class="summary">
-            <div>Filtro de Categoria: <strong>${categoryTitulosFilter === 'all' ? 'Todas as Categorias' : categoryTitulosFilter}</strong></div>
+
+          <!-- Total de Exemplares por Categoria -->
+          <div class="category-card">
+            <h3>Total de Exemplares por Categoria</h3>
+            <table style="margin-bottom: 0;">
+              <thead>
+                <tr>
+                  <th style="font-size: 10px;">Categoria</th>
+                  <th style="text-align: center; font-size: 10px;">Qtd. Títulos</th>
+                  <th style="text-align: center; font-size: 10px;">Total de Exemplares</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${categoryStatsRowsHtml || '<tr><td colspan="3" style="text-align: center; padding: 10px;">Sem dados de categoria.</td></tr>'}
+                <tr style="background-color: #f1f5f9; font-weight: bold;">
+                  <td style="padding: 6px 8px; border-top: 2px solid #cbd5e1;">TOTAL CONSOLIDADO</td>
+                  <td style="padding: 6px 8px; border-top: 2px solid #cbd5e1; text-align: center;">${filteredTitulos.length} títulos</td>
+                  <td style="padding: 6px 8px; border-top: 2px solid #cbd5e1; text-align: center; color: #065f46;">${totalExemplaresGeral} exemplares</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="footer">
+            <div>Filtro Categoria: <strong>${categoryTitulosFilter === 'all' ? 'Todas' : categoryTitulosFilter}</strong> | ${periodText}</div>
             <div>Documento gerado pelo sistema Biblioteca CEP</div>
           </div>
           <script>
@@ -671,27 +891,60 @@ export default function Historico() {
       return
     }
 
+    const visibleColsCount = Object.values(colsUsuarios).filter(Boolean).length || 1
+
+    const ths: string[] = []
+    if (colsUsuarios.nome) ths.push('<th>Nome</th>')
+    if (colsUsuarios.email) ths.push('<th>E-mail</th>')
+    if (colsUsuarios.telefone) ths.push('<th>Telefone</th>')
+    if (colsUsuarios.papel) ths.push('<th>Papel</th>')
+    if (colsUsuarios.status) ths.push('<th>Status</th>')
+    if (colsUsuarios.data_cadastro)
+      ths.push('<th style="text-align: center;">Data de Cadastro</th>')
+
     const rowsHtml = filteredUsuarios
-      .map(
-        (u) => `
-      <tr>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${u.full_name || u.nome || 'Sem nome'}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${u.email || '-'}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${u.phone || u.telefone ? formatPhone(u.phone || u.telefone) : '-'}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">
-          <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: ${u.role === 'admin' ? '#f3e8ff; color: #6b21a8;' : '#e0e7ff; color: #3730a3;'}">
-            ${u.role === 'admin' ? 'Administrador' : 'Operador'}
-          </span>
-        </td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">
-          <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: ${u.status === 'inativo' || u.bloqueado ? '#fee2e2; color: #991b1b;' : '#dcfce7; color: #166534;'}">
-            ${u.status === 'inativo' || u.bloqueado ? 'Inativo' : 'Ativo'}
-          </span>
-        </td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace; text-align: center;">${formatDate(u.created_at)}</td>
-      </tr>
-    `,
-      )
+      .map((u) => {
+        const tds: string[] = []
+        if (colsUsuarios.nome) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 600;">${u.full_name || u.nome || 'Sem nome'}</td>`,
+          )
+        }
+        if (colsUsuarios.email) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${u.email || '-'}</td>`,
+          )
+        }
+        if (colsUsuarios.telefone) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${u.phone || u.telefone ? formatPhone(u.phone || u.telefone) : '-'}</td>`,
+          )
+        }
+        if (colsUsuarios.papel) {
+          tds.push(`
+            <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">
+              <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: ${u.role === 'admin' ? '#f3e8ff; color: #6b21a8;' : '#e0e7ff; color: #3730a3;'}">
+                ${u.role === 'admin' ? 'Administrador' : 'Operador'}
+              </span>
+            </td>
+          `)
+        }
+        if (colsUsuarios.status) {
+          tds.push(`
+            <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">
+              <span style="display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; background-color: ${u.status === 'inativo' || u.bloqueado ? '#fee2e2; color: #991b1b;' : '#dcfce7; color: #166534;'}">
+                ${u.status === 'inativo' || u.bloqueado ? 'Inativo' : 'Ativo'}
+              </span>
+            </td>
+          `)
+        }
+        if (colsUsuarios.data_cadastro) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace; text-align: center;">${formatDate(u.created_at)}</td>`,
+          )
+        }
+        return `<tr>${tds.join('')}</tr>`
+      })
       .join('')
 
     const dateToday = formatDate(new Date())
@@ -730,16 +983,11 @@ export default function Historico() {
           <table>
             <thead>
               <tr>
-                <th>Nome</th>
-                <th>E-mail</th>
-                <th>Telefone</th>
-                <th>Papel</th>
-                <th>Status</th>
-                <th style="text-align: center;">Data de Cadastro</th>
+                ${ths.join('')}
               </tr>
             </thead>
             <tbody>
-              ${rowsHtml || '<tr><td colspan="6" style="text-align: center; padding: 20px;">Nenhum usuário encontrado.</td></tr>'}
+              ${rowsHtml || `<tr><td colspan="${visibleColsCount}" style="text-align: center; padding: 20px;">Nenhum usuário encontrado.</td></tr>`}
             </tbody>
           </table>
           <div class="summary">
@@ -826,20 +1074,57 @@ export default function Historico() {
       return
     }
 
+    const visibleColsCount = Object.values(colsMovimentacoes).filter(Boolean).length || 1
+
+    const ths: string[] = []
+    if (colsMovimentacoes.tipo) ths.push('<th>Tipo</th>')
+    if (colsMovimentacoes.data_evento) ths.push('<th>Data Evento</th>')
+    if (colsMovimentacoes.titulo_livro) ths.push('<th>Livro / Título</th>')
+    if (colsMovimentacoes.exemplar) ths.push('<th>Exemplar</th>')
+    if (colsMovimentacoes.leitor) ths.push('<th>Leitor</th>')
+    if (colsMovimentacoes.status) ths.push('<th>Status</th>')
+    if (colsMovimentacoes.detalhes) ths.push('<th>Detalhes / Previsão</th>')
+
     const rowsHtml = filteredMovimentacoes
-      .map(
-        (m) => `
-      <tr>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">${m.tipo_registro}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${formatDate(m.data_evento)}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">${m.titulo_livro}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${m.id_exemplar || '-'}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${m.leitor_nome}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${m.status}</td>
-        <td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; color: #64748b;">${m.detalhes}</td>
-      </tr>
-    `,
-      )
+      .map((m) => {
+        const tds: string[] = []
+        if (colsMovimentacoes.tipo) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">${m.tipo_registro}</td>`,
+          )
+        }
+        if (colsMovimentacoes.data_evento) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${formatDate(m.data_evento)}</td>`,
+          )
+        }
+        if (colsMovimentacoes.titulo_livro) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-weight: 500;">${m.titulo_livro}</td>`,
+          )
+        }
+        if (colsMovimentacoes.exemplar) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">${m.id_exemplar || '-'}</td>`,
+          )
+        }
+        if (colsMovimentacoes.leitor) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${m.leitor_nome}</td>`,
+          )
+        }
+        if (colsMovimentacoes.status) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0;">${m.status}</td>`,
+          )
+        }
+        if (colsMovimentacoes.detalhes) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; color: #64748b;">${m.detalhes}</td>`,
+          )
+        }
+        return `<tr>${tds.join('')}</tr>`
+      })
       .join('')
 
     const dateToday = formatDate(new Date())
@@ -877,17 +1162,11 @@ export default function Historico() {
           <table>
             <thead>
               <tr>
-                <th>Tipo</th>
-                <th>Data Evento</th>
-                <th>Livro / Título</th>
-                <th>Exemplar</th>
-                <th>Leitor</th>
-                <th>Status</th>
-                <th>Detalhes / Previsão</th>
+                ${ths.join('')}
               </tr>
             </thead>
             <tbody>
-              ${rowsHtml || '<tr><td colspan="7" style="text-align: center; padding: 20px;">Nenhuma movimentação encontrada.</td></tr>'}
+              ${rowsHtml || `<tr><td colspan="${visibleColsCount}" style="text-align: center; padding: 20px;">Nenhuma movimentação encontrada.</td></tr>`}
             </tbody>
           </table>
           <script>
@@ -976,6 +1255,96 @@ export default function Historico() {
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-1.5">
+                        <SlidersHorizontal className="h-4 w-4" />
+                        Colunas na Impressão
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-3" align="end">
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-foreground border-b pb-1 flex items-center justify-between">
+                          <span>Colunas do Relatório</span>
+                          <span className="text-[10px] text-muted-foreground">Impressão/PDF</span>
+                        </div>
+                        <div className="space-y-1.5 pt-1">
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLeitores.id}
+                              onCheckedChange={(v) =>
+                                setColsLeitores((prev) => ({ ...prev, id: !!v }))
+                              }
+                            />
+                            <span>ID do Leitor</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLeitores.nome}
+                              onCheckedChange={(v) =>
+                                setColsLeitores((prev) => ({ ...prev, nome: !!v }))
+                              }
+                            />
+                            <span>Nome</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLeitores.cpf}
+                              onCheckedChange={(v) =>
+                                setColsLeitores((prev) => ({ ...prev, cpf: !!v }))
+                              }
+                            />
+                            <span>CPF</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLeitores.email}
+                              onCheckedChange={(v) =>
+                                setColsLeitores((prev) => ({ ...prev, email: !!v }))
+                              }
+                            />
+                            <span>E-mail</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLeitores.telefone}
+                              onCheckedChange={(v) =>
+                                setColsLeitores((prev) => ({ ...prev, telefone: !!v }))
+                              }
+                            />
+                            <span>Telefone</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLeitores.status}
+                              onCheckedChange={(v) =>
+                                setColsLeitores((prev) => ({ ...prev, status: !!v }))
+                              }
+                            />
+                            <span>Status (Ativo/Bloqueado)</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLeitores.emprestimos}
+                              onCheckedChange={(v) =>
+                                setColsLeitores((prev) => ({ ...prev, emprestimos: !!v }))
+                              }
+                            />
+                            <span>Empréstimos</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLeitores.data_cadastro}
+                              onCheckedChange={(v) =>
+                                setColsLeitores((prev) => ({ ...prev, data_cadastro: !!v }))
+                              }
+                            />
+                            <span>Data de Cadastro</span>
+                          </label>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1141,6 +1510,78 @@ export default function Historico() {
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-1.5">
+                        <SlidersHorizontal className="h-4 w-4" />
+                        Colunas na Impressão
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-3" align="end">
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-foreground border-b pb-1 flex items-center justify-between">
+                          <span>Colunas do Relatório</span>
+                          <span className="text-[10px] text-muted-foreground">Impressão/PDF</span>
+                        </div>
+                        <div className="space-y-1.5 pt-1">
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLogs.data_hora}
+                              onCheckedChange={(v) =>
+                                setColsLogs((prev) => ({ ...prev, data_hora: !!v }))
+                              }
+                            />
+                            <span>Data / Hora</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLogs.operacao}
+                              onCheckedChange={(v) =>
+                                setColsLogs((prev) => ({ ...prev, operacao: !!v }))
+                              }
+                            />
+                            <span>Operação</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLogs.exemplar}
+                              onCheckedChange={(v) =>
+                                setColsLogs((prev) => ({ ...prev, exemplar: !!v }))
+                              }
+                            />
+                            <span>Exemplar</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLogs.leitor}
+                              onCheckedChange={(v) =>
+                                setColsLogs((prev) => ({ ...prev, leitor: !!v }))
+                              }
+                            />
+                            <span>Leitor</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLogs.operador}
+                              onCheckedChange={(v) =>
+                                setColsLogs((prev) => ({ ...prev, operador: !!v }))
+                              }
+                            />
+                            <span>Operador</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLogs.detalhes}
+                              onCheckedChange={(v) =>
+                                setColsLogs((prev) => ({ ...prev, detalhes: !!v }))
+                              }
+                            />
+                            <span>Detalhes</span>
+                          </label>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1293,11 +1734,95 @@ export default function Historico() {
                     Relatório de Títulos com Exemplares
                   </CardTitle>
                   <CardDescription>
-                    Listagem consolidada de todas as obras cadastradas com seus respectivos
-                    exemplares e códigos.
+                    Listagem consolidada de todas as obras cadastradas com filtro por período,
+                    totalizadores por categoria e exemplares físicos vinculados.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-1.5">
+                        <SlidersHorizontal className="h-4 w-4" />
+                        Colunas na Impressão
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-3" align="end">
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-foreground border-b pb-1 flex items-center justify-between">
+                          <span>Colunas do Relatório</span>
+                          <span className="text-[10px] text-muted-foreground">Impressão/PDF</span>
+                        </div>
+                        <div className="space-y-1.5 pt-1">
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsTitulos.codigo}
+                              onCheckedChange={(v) =>
+                                setColsTitulos((prev) => ({ ...prev, codigo: !!v }))
+                              }
+                            />
+                            <span>Código do Título</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsTitulos.titulo}
+                              onCheckedChange={(v) =>
+                                setColsTitulos((prev) => ({ ...prev, titulo: !!v }))
+                              }
+                            />
+                            <span>Título do Livro</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsTitulos.autor}
+                              onCheckedChange={(v) =>
+                                setColsTitulos((prev) => ({ ...prev, autor: !!v }))
+                              }
+                            />
+                            <span>Autor</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsTitulos.categoria}
+                              onCheckedChange={(v) =>
+                                setColsTitulos((prev) => ({ ...prev, categoria: !!v }))
+                              }
+                            />
+                            <span>Categoria</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsTitulos.editora}
+                              onCheckedChange={(v) =>
+                                setColsTitulos((prev) => ({ ...prev, editora: !!v }))
+                              }
+                            />
+                            <span>Editora</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsTitulos.total_exemplares}
+                              onCheckedChange={(v) =>
+                                setColsTitulos((prev) => ({ ...prev, total_exemplares: !!v }))
+                              }
+                            />
+                            <span>Qtd. Exemplares</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsTitulos.detalhes_exemplares}
+                              onCheckedChange={(v) =>
+                                setColsTitulos((prev) => ({
+                                  ...prev,
+                                  detalhes_exemplares: !!v,
+                                }))
+                              }
+                            />
+                            <span>Códigos / Status</span>
+                          </label>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1319,12 +1844,12 @@ export default function Historico() {
                 </div>
               </div>
 
-              {/* Filtros */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4">
+              {/* Filtros com Período no mesmo padrão do relatório de Movimentações */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar título, autor ou código de exemplar..."
+                    placeholder="Buscar título, autor ou exemplar..."
                     value={searchTitulos}
                     onChange={(e) => setSearchTitulos(e.target.value)}
                     className="pl-9"
@@ -1345,9 +1870,72 @@ export default function Historico() {
                   </SelectContent>
                 </Select>
 
-                <div className="text-sm text-muted-foreground flex items-center justify-end">
-                  Total de títulos exibidos:{' '}
-                  <strong className="ml-1 text-foreground">{filteredTitulos.length}</strong>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-medium shrink-0">De:</span>
+                  <DatePickerBR
+                    value={dataInicioTitulos}
+                    onChange={setDataInicioTitulos}
+                    placeholder="dd/mm/aaaa"
+                    className="flex-1"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-medium shrink-0">Até:</span>
+                  <DatePickerBR
+                    value={dataFimTitulos}
+                    onChange={setDataFimTitulos}
+                    placeholder="dd/mm/aaaa"
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={fetchTitulos}
+                    className="h-9 px-3 shrink-0"
+                  >
+                    Filtrar
+                  </Button>
+                </div>
+              </div>
+
+              {/* Bloco Total de Exemplares por Categoria */}
+              <div className="mt-4 pt-4 border-t border-border/50">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <BarChart2 className="h-3.5 w-3.5 text-primary" />
+                    Total de Exemplares por Categoria
+                  </h3>
+                  <div className="text-xs text-muted-foreground">
+                    Total geral:{' '}
+                    <strong className="text-primary font-bold">{totalExemplaresGeral}</strong>{' '}
+                    exemplar(es) em{' '}
+                    <strong className="text-foreground">{filteredTitulos.length}</strong> título(s)
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                  {categoryStats.map(([cat, data]) => (
+                    <div
+                      key={cat}
+                      className="p-2.5 rounded-md border border-border/70 bg-muted/30 flex flex-col justify-between"
+                    >
+                      <span className="text-xs font-medium text-foreground truncate" title={cat}>
+                        {cat}
+                      </span>
+                      <div className="flex items-baseline justify-between mt-1 pt-1 border-t border-border/40">
+                        <span className="text-[11px] text-muted-foreground">
+                          {data.titulos} {data.titulos === 1 ? 'título' : 'títulos'}
+                        </span>
+                        <Badge
+                          variant="secondary"
+                          className="font-bold text-xs bg-primary/10 text-primary border-primary/20"
+                        >
+                          {data.exemplares} {data.exemplares === 1 ? 'ex.' : 'exs.'}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </CardHeader>
@@ -1483,6 +2071,78 @@ export default function Historico() {
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-1.5">
+                        <SlidersHorizontal className="h-4 w-4" />
+                        Colunas na Impressão
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-3" align="end">
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-foreground border-b pb-1 flex items-center justify-between">
+                          <span>Colunas do Relatório</span>
+                          <span className="text-[10px] text-muted-foreground">Impressão/PDF</span>
+                        </div>
+                        <div className="space-y-1.5 pt-1">
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsUsuarios.nome}
+                              onCheckedChange={(v) =>
+                                setColsUsuarios((prev) => ({ ...prev, nome: !!v }))
+                              }
+                            />
+                            <span>Nome</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsUsuarios.email}
+                              onCheckedChange={(v) =>
+                                setColsUsuarios((prev) => ({ ...prev, email: !!v }))
+                              }
+                            />
+                            <span>E-mail</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsUsuarios.telefone}
+                              onCheckedChange={(v) =>
+                                setColsUsuarios((prev) => ({ ...prev, telefone: !!v }))
+                              }
+                            />
+                            <span>Telefone</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsUsuarios.papel}
+                              onCheckedChange={(v) =>
+                                setColsUsuarios((prev) => ({ ...prev, papel: !!v }))
+                              }
+                            />
+                            <span>Papel</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsUsuarios.status}
+                              onCheckedChange={(v) =>
+                                setColsUsuarios((prev) => ({ ...prev, status: !!v }))
+                              }
+                            />
+                            <span>Status</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsUsuarios.data_cadastro}
+                              onCheckedChange={(v) =>
+                                setColsUsuarios((prev) => ({ ...prev, data_cadastro: !!v }))
+                              }
+                            />
+                            <span>Data de Cadastro</span>
+                          </label>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   <Button
                     variant="outline"
                     size="sm"
@@ -1634,6 +2294,87 @@ export default function Historico() {
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="gap-1.5">
+                        <SlidersHorizontal className="h-4 w-4" />
+                        Colunas na Impressão
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-3" align="end">
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-foreground border-b pb-1 flex items-center justify-between">
+                          <span>Colunas do Relatório</span>
+                          <span className="text-[10px] text-muted-foreground">Impressão/PDF</span>
+                        </div>
+                        <div className="space-y-1.5 pt-1">
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsMovimentacoes.tipo}
+                              onCheckedChange={(v) =>
+                                setColsMovimentacoes((prev) => ({ ...prev, tipo: !!v }))
+                              }
+                            />
+                            <span>Tipo de Registro</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsMovimentacoes.data_evento}
+                              onCheckedChange={(v) =>
+                                setColsMovimentacoes((prev) => ({ ...prev, data_evento: !!v }))
+                              }
+                            />
+                            <span>Data do Evento</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsMovimentacoes.titulo_livro}
+                              onCheckedChange={(v) =>
+                                setColsMovimentacoes((prev) => ({ ...prev, titulo_livro: !!v }))
+                              }
+                            />
+                            <span>Livro / Título</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsMovimentacoes.exemplar}
+                              onCheckedChange={(v) =>
+                                setColsMovimentacoes((prev) => ({ ...prev, exemplar: !!v }))
+                              }
+                            />
+                            <span>Exemplar</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsMovimentacoes.leitor}
+                              onCheckedChange={(v) =>
+                                setColsMovimentacoes((prev) => ({ ...prev, leitor: !!v }))
+                              }
+                            />
+                            <span>Leitor</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsMovimentacoes.status}
+                              onCheckedChange={(v) =>
+                                setColsMovimentacoes((prev) => ({ ...prev, status: !!v }))
+                              }
+                            />
+                            <span>Status</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsMovimentacoes.detalhes}
+                              onCheckedChange={(v) =>
+                                setColsMovimentacoes((prev) => ({ ...prev, detalhes: !!v }))
+                              }
+                            />
+                            <span>Detalhes / Previsão</span>
+                          </label>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                   <Button
                     variant="outline"
                     size="sm"
