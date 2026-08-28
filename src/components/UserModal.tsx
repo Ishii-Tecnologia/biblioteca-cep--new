@@ -40,7 +40,7 @@ export function UserModal({ open, onOpenChange, onSuccess }: UserModalProps) {
     nome: '',
     email: '',
     password: '',
-    papel: 'leitor' as 'admin' | 'operador' | 'leitor',
+    papel: 'operador' as 'admin' | 'operador',
     avatar_url: '',
   })
 
@@ -50,7 +50,7 @@ export function UserModal({ open, onOpenChange, onSuccess }: UserModalProps) {
         nome: '',
         email: '',
         password: '',
-        papel: 'leitor',
+        papel: 'operador',
         avatar_url: '',
       })
       setPhotoFile(null)
@@ -210,22 +210,7 @@ export function UserModal({ open, onOpenChange, onSuccess }: UserModalProps) {
           console.warn('Erro ao atualizar perfil na tabela profiles:', profileError)
         }
 
-        // Também assegurar cadastro de leitor se for leitor
-        try {
-          await supabase.from('leitor').upsert(
-            {
-              id_auth: userId,
-              nome_do_leitor: nome,
-              email: email,
-              cpf: '',
-              data_cadastro: new Date().toISOString().split('T')[0],
-              bloqueado: false,
-            },
-            { onConflict: 'id_auth' },
-          )
-        } catch (leitorErr) {
-          console.warn('Aviso leitor:', leitorErr)
-        }
+
       }
 
       toast({
@@ -391,7 +376,7 @@ export function UserModal({ open, onOpenChange, onSuccess }: UserModalProps) {
               </Label>
               <Select
                 value={formData.papel}
-                onValueChange={(val: 'admin' | 'operador' | 'leitor') =>
+                onValueChange={(val: 'admin' | 'operador') =>
                   setFormData({ ...formData, papel: val })
                 }
                 disabled={loading}
@@ -400,12 +385,6 @@ export function UserModal({ open, onOpenChange, onSuccess }: UserModalProps) {
                   <SelectValue placeholder="Selecione o papel" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="leitor">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                      <span>Leitor (Padrão - consulta e reservas)</span>
-                    </div>
-                  </SelectItem>
                   <SelectItem value="operador">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-blue-600" />

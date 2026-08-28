@@ -49,13 +49,14 @@ export function EditUserModal({
     nome: '',
     email: '',
     telefone: '',
-    papel: 'leitor' as 'admin' | 'operador' | 'leitor',
+    papel: 'operador' as 'admin' | 'operador',
     avatar_url: '',
   })
 
   useEffect(() => {
     if (open && user) {
-      const currentRole = (user.papel || user.role || 'leitor') as 'admin' | 'operador' | 'leitor'
+      const rawRole = user.papel || user.role || 'operador'
+      const currentRole = (rawRole === 'admin' ? 'admin' : 'operador') as 'admin' | 'operador'
       const currentName = user.nome || user.full_name || ''
       const currentEmail = user.email || ''
       const currentAvatar = user.avatar_url || ''
@@ -358,7 +359,7 @@ export function EditUserModal({
               </Label>
               <Select
                 value={formData.papel}
-                onValueChange={(val: 'admin' | 'operador' | 'leitor') =>
+                onValueChange={(val: 'admin' | 'operador') =>
                   setFormData({ ...formData, papel: val })
                 }
                 disabled={loading}
@@ -367,12 +368,6 @@ export function EditUserModal({
                   <SelectValue placeholder="Selecione o papel" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="leitor" disabled={isCurrentUser && formData.papel === 'admin'}>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                      <span>Leitor (Padrão - consulta e reservas)</span>
-                    </div>
-                  </SelectItem>
                   <SelectItem
                     value="operador"
                     disabled={isCurrentUser && formData.papel === 'admin'}

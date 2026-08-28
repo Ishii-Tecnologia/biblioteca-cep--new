@@ -121,9 +121,9 @@ export default function Usuarios() {
 
   const handleUpdateRole = async (
     profile: ProfileRecord,
-    newRole: 'admin' | 'operador' | 'leitor',
+    newRole: 'admin' | 'operador',
   ) => {
-    const currentPapel = profile.papel || profile.role || 'leitor'
+    const currentPapel = profile.papel || profile.role || 'operador'
     if (currentPapel === newRole) return
 
     if (isSelf(profile) && newRole !== 'admin') {
@@ -150,7 +150,7 @@ export default function Usuarios() {
 
       toast({
         title: 'Papel atualizado',
-        description: `O papel de ${profile.nome || profile.email} foi alterado para "${newRole}".`,
+        description: `O papel de ${profile.nome || profile.email} foi alterado para "${newRole === 'admin' ? 'Administrador' : 'Operador'}".`,
       })
     } catch (err: any) {
       toast({
@@ -291,7 +291,7 @@ export default function Usuarios() {
             Controle de Usuários
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Gerencie permissões de acesso, papéis (admin, operador, leitor) e status de bloqueio dos
+            Gerencie permissões de acesso, papéis (Administrador e Operador) e status de bloqueio dos
             usuários cadastrados.
           </p>
         </div>
@@ -518,7 +518,7 @@ export default function Usuarios() {
                               <DropdownMenuRadioGroup
                                 value={role}
                                 onValueChange={(val) =>
-                                  handleUpdateRole(p, val as 'admin' | 'operador' | 'leitor')
+                                  handleUpdateRole(p, val as 'admin' | 'operador')
                                 }
                               >
                                 <DropdownMenuRadioItem
@@ -535,14 +535,6 @@ export default function Usuarios() {
                                 >
                                   <span className="w-2 h-2 rounded-full bg-blue-600 mr-2" />
                                   Operador (Bibliotecário)
-                                </DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem
-                                  value="leitor"
-                                  disabled={isCurrentUser && role === 'admin'}
-                                  className="text-xs cursor-pointer focus:bg-emerald-50 focus:text-emerald-900"
-                                >
-                                  <span className="w-2 h-2 rounded-full bg-emerald-600 mr-2" />
-                                  Leitor (Padrão)
                                 </DropdownMenuRadioItem>
                               </DropdownMenuRadioGroup>
 
