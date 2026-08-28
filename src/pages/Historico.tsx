@@ -1104,7 +1104,10 @@ export default function Historico() {
                           </div>
                           <div className="flex items-center gap-2">
                             {titulo.categoria && (
-                              <Badge className="bg-primary/10 text-primary border-primary/20">
+                              <Badge
+                                variant="outline"
+                                className="bg-muted/50 text-black border-border/80 font-normal hover:bg-muted/50 hover:text-black cursor-default pointer-events-none select-none"
+                              >
                                 {titulo.categoria}
                               </Badge>
                             )}
