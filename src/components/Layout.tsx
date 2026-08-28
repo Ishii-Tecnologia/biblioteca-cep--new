@@ -18,6 +18,7 @@ import {
   X,
   BookMarked,
   KeyRound,
+  UserCheck,
 } from 'lucide-react'
 import { ChangeOwnPasswordModal } from '@/components/ChangeOwnPasswordModal'
 import { Button } from '@/components/ui/button'
@@ -59,7 +60,13 @@ export default function Layout({ children }: LayoutProps) {
     { to: '/acervo', label: 'Livros', icon: BookOpen, authRequired: false },
     { to: '/emprestimos', label: 'Empréstimos', icon: Repeat, authRequired: true },
     { to: '/reservas', label: 'Reservas', icon: BookmarkCheck, authRequired: true },
-    { to: '/leitores', label: 'Leitores', icon: Users, authRequired: true, operatorOnly: true },
+    {
+      to: '/leitores',
+      label: isOperadorOrAdmin ? 'Leitores' : 'Meus Dados',
+      icon: isOperadorOrAdmin ? Users : UserCheck,
+      authRequired: true,
+      operatorOnly: false,
+    },
     {
       to: '/historico',
       label: 'Relatórios',
@@ -206,21 +213,28 @@ export default function Layout({ children }: LayoutProps) {
                         Reservas
                       </Link>
                     </DropdownMenuItem>
-                    {isOperadorOrAdmin && (
-                      <>
-                        <DropdownMenuItem asChild>
-                          <Link to="/leitores" className="cursor-pointer">
+                    <DropdownMenuItem asChild>
+                      <Link to="/leitores" className="cursor-pointer">
+                        {isOperadorOrAdmin ? (
+                          <>
                             <Users className="w-4 h-4 mr-2" />
                             Leitores
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link to="/historico" className="cursor-pointer">
-                            <History className="w-4 h-4 mr-2" />
-                            Relatórios
-                          </Link>
-                        </DropdownMenuItem>
-                      </>
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="w-4 h-4 mr-2 text-emerald-600" />
+                            Meus Dados de Cadastro
+                          </>
+                        )}
+                      </Link>
+                    </DropdownMenuItem>
+                    {isOperadorOrAdmin && (
+                      <DropdownMenuItem asChild>
+                        <Link to="/historico" className="cursor-pointer">
+                          <History className="w-4 h-4 mr-2" />
+                          Relatórios
+                        </Link>
+                      </DropdownMenuItem>
                     )}
                     {isAdmin && (
                       <>

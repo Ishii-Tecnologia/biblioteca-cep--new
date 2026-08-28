@@ -18,14 +18,25 @@ import { UserPlus, Loader2, Upload, Camera, X, ClipboardPaste } from 'lucide-rea
 import { uploadImageToStorage } from '@/lib/image-upload'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
+import { useAuth } from '@/hooks/use-auth'
+import { Info, AlertCircle } from 'lucide-react'
+
 interface ReaderModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   readerToEdit?: Leitor | null
+  isSelfEdit?: boolean
   onSuccess: () => void
 }
 
-export function ReaderModal({ open, onOpenChange, readerToEdit, onSuccess }: ReaderModalProps) {
+export function ReaderModal({
+  open,
+  onOpenChange,
+  readerToEdit,
+  isSelfEdit = false,
+  onSuccess,
+}: ReaderModalProps) {
+  const { isOperadorOrAdmin, refreshProfile } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -126,10 +137,19 @@ export function ReaderModal({ open, onOpenChange, readerToEdit, onSuccess }: Rea
     e.preventDefault()
     setCpfError(null)
 
-    if (!formData.nome_do_leitor.trim() || !formData.email.trim()) {
+    if (!formData.nome_do_leitor.trim()) {
       toast({
-        title: 'Campos obrigatórios',
-        description: 'Nome completo e e-mail são obrigatórios.',
+        title: 'Nome obrigatório',
+        description: 'O campo Nome Completo é obrigatório.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!readerToEdit && !formData.email.trim()) {
+      toast({
+        title: 'E-mail obrigatório',
+        description: 'O endereço de e-mail é obrigatório para novos cadastros.',
         variant: 'destructive',
       })
       return
@@ -182,23 +202,30 @@ export function ReaderModal({ open, onOpenChange, readerToEdit, onSuccess }: Rea
       }
 
       if (readerToEdit) {
-        await LeitoresService.update(readerToEdit.id_leitor, {
-          nome_do_leitor: formData.nome_do_leitor,
-          email: formData.email,
-          cpf: formData.cpf || null,
-          telefone: formData.telefone || null,
+        // Na edição, o e-mail NÃO é alterado (mantém o e-mail original como login de entrada)
+        const updatePayload: any = {
+          nome_do_leitor: formData.nome_do_leitor.trim(),
+          cpf: formData.cpf.trim() || null,
+          telefone: formData.telefone.trim() || null,
           foto: finalFotoUrl,
-          bloqueado: formData.bloqueado,
-        })
+        }
+
+        // Apenas operador/admin pode alterar o status de bloqueio
+        if (isOperadorOrAdmin && !isSelfEdit) {
+          updatePayload.bloqueado = formData.bloqueado
+        }
+
+        await LeitoresService.update(readerToEdit.id_leitor, updatePayload)
+        await refreshProfile()
         toast({ title: 'Sucesso', description: 'Dados do leitor atualizados com sucesso!' })
       } else {
         await LeitoresService.create({
-          nome_do_leitor: formData.nome_do_leitor,
-          email: formData.email,
-          cpf: formData.cpf || null,
-          telefone: formData.telefone || null,
+          nome_do_leitor: formData.nome_do_leitor.trim(),
+          email: formData.email.trim(),
+          cpf: formData.cpf.trim() || null,
+          telefone: formData.telefone.trim() || null,
           foto: finalFotoUrl,
-          bloqueado: formData.bloqueado,
+          bloqueado: isOperadorOrAdmin ? formData.bloqueado : false,
         })
         toast({ title: 'Sucesso', description: 'Novo leitor cadastrado com sucesso!' })
       }
@@ -222,11 +249,17 @@ export function ReaderModal({ open, onOpenChange, readerToEdit, onSuccess }: Rea
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-900">
               <UserPlus className="w-5 h-5 text-emerald-600" />
-              {readerToEdit ? 'Editar Cadastro do Leitor' : 'Cadastrar Novo Leitor'}
+              {readerToEdit
+                ? isSelfEdit
+                  ? 'Editar Meus Dados de Cadastro'
+                  : 'Editar Cadastro do Leitor'
+                : 'Cadastrar Novo Leitor'}
             </DialogTitle>
             <DialogDescription>
               {readerToEdit
-                ? 'Atualize as informações de contato e permissão do leitor.'
+                ? isSelfEdit
+                  ? 'Altere suas informações de nome, CPF, telefone e foto. O e-mail de login não pode ser alterado.'
+                  : 'Atualize as informações de contato e permissão do leitor. O e-mail de login é protegido contra alteração.'
                 : 'Cadastre um leitor para habilitar a realização de empréstimos.'}
             </DialogDescription>
           </DialogHeader>
@@ -305,18 +338,47 @@ export function ReaderModal({ open, onOpenChange, readerToEdit, onSuccess }: Rea
             </div>
 
             <div>
-              <Label htmlFor="email" className="text-xs font-semibold text-slate-700">
-                E-mail Institucional ou Pessoal *
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="email" className="text-xs font-semibold text-slate-700">
+                  {readerToEdit
+                    ? 'E-mail (Login de Entrada - Não Editável)'
+                    : 'E-mail Institucional ou Pessoal *'}
+                </Label>
+                {readerToEdit && (
+                  <span className="text-[11px] font-medium text-amber-700 flex items-center gap-1">
+                    <Info className="w-3 h-3" /> Login Bloqueado
+                  </span>
+                )}
+              </div>
               <Input
                 id="email"
                 type="email"
-                required
+                required={!readerToEdit}
+                readOnly={!!readerToEdit}
+                disabled={!!readerToEdit}
                 placeholder="Ex: maria.santos@escola.br"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="mt-1"
+                className={`mt-1 text-xs ${
+                  readerToEdit
+                    ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200 select-none'
+                    : ''
+                }`}
               />
+              {readerToEdit ? (
+                <div className="mt-1.5 flex items-start gap-1.5 p-2 rounded bg-amber-50/80 border border-amber-200/60 text-[11px] text-amber-900 leading-snug">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                  <span>
+                    O e-mail é o <strong>login de entrada</strong> e não pode ser alterado na
+                    edição. Para alterar o e-mail, é necessário excluir o leitor e cadastrá-lo
+                    novamente com o novo e-mail.
+                  </span>
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Este e-mail será utilizado como identificador de login de acesso.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -359,7 +421,7 @@ export function ReaderModal({ open, onOpenChange, readerToEdit, onSuccess }: Rea
               </div>
             </div>
 
-            {readerToEdit && (
+            {readerToEdit && isOperadorOrAdmin && !isSelfEdit && (
               <div
                 className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg border transition-colors ${
                   formData.bloqueado

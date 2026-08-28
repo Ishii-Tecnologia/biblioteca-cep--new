@@ -49,7 +49,7 @@ const App = () => (
             <Route
               path="/leitores"
               element={
-                <ProtectedRoute requireOperator>
+                <ProtectedRoute>
                   <Leitores />
                 </ProtectedRoute>
               }

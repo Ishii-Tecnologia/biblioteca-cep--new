@@ -132,6 +132,37 @@ export const LeitoresService = {
       .single()
 
     if (error) throw error
+
+    // Sincronizar dados em public.profiles e user_metadata caso exista id_auth ou email vinculado
+    try {
+      const authId = data.id_auth
+      const email = data.email
+      if (authId) {
+        // Atualiza perfil no profiles
+        await supabase
+          .from('profiles')
+          .update({
+            nome: data.nome_do_leitor,
+            full_name: data.nome_do_leitor,
+            telefone: data.telefone,
+            avatar_url: data.foto,
+          })
+          .eq('id', authId)
+      } else if (email) {
+        await supabase
+          .from('profiles')
+          .update({
+            nome: data.nome_do_leitor,
+            full_name: data.nome_do_leitor,
+            telefone: data.telefone,
+            avatar_url: data.foto,
+          })
+          .eq('email', email)
+      }
+    } catch (syncErr) {
+      console.warn('Não foi possível sincronizar profiles:', syncErr)
+    }
+
     return data
   },
 
