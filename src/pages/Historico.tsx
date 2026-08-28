@@ -97,8 +97,6 @@ export default function Historico() {
   const [loadingTitulos, setLoadingTitulos] = useState(false)
   const [searchTitulos, setSearchTitulos] = useState('')
   const [categoryTitulosFilter, setCategoryTitulosFilter] = useState('all')
-  const [dataInicioTitulos, setDataInicioTitulos] = useState('')
-  const [dataFimTitulos, setDataFimTitulos] = useState('')
 
   // --- ABA 3: USUÁRIOS ---
   const [usuariosList, setUsuariosList] = useState<any[]>([])
@@ -168,18 +166,15 @@ export default function Historico() {
   const isAdmin = profile?.role === 'admin'
 
   // Load logs
-  const fetchLogs = async () => {
-    // Quando o filtro de tipo estiver marcado como "todos", o relatório deve listar TUDO que está na tabela,
-    // respeitando o filtro de datas se estiver definido.
-    // Se nenhum filtro de tipo foi selecionado (ou "todos") e não há datas, limit=0 (sem limite) busca tudo da tabela.
+  const fetchLogs = async (customInicio?: string, customFim?: string) => {
+    // Quando o tipo estiver marcado como "Todos os tipos" (ou "todos"), listar todos os registros da tabela (sem filtro de tipo)
     try {
       setLoadingLogs(true)
-      const limit = tipoFiltroLogs === 'todos' && !dataInicioLogs && !dataFimLogs ? 0 : 300
       const data = await HistoricoService.getAll(
-        limit,
-        tipoFiltroLogs,
-        dataInicioLogs || undefined,
-        dataFimLogs || undefined,
+        0,
+        tipoFiltroLogs === 'todos' ? undefined : tipoFiltroLogs,
+        (customInicio !== undefined ? customInicio : dataInicioLogs).trim() || undefined,
+        (customFim !== undefined ? customFim : dataFimLogs).trim() || undefined,
       )
       setLogs(data)
     } catch (err: any) {
@@ -191,6 +186,20 @@ export default function Historico() {
     } finally {
       setLoadingLogs(false)
     }
+  }
+
+  // Filter logs manually via button
+  const handleFilterLogs = () => {
+    if (!dataInicioLogs.trim() || !dataFimLogs.trim()) {
+      toast({
+        title: 'Informe a data inicial e final',
+        description:
+          'Por favor, preencha os campos "De" e "Até" com as datas desejadas antes de aplicar o filtro.',
+        variant: 'destructive',
+      })
+      return
+    }
+    fetchLogs(dataInicioLogs, dataFimLogs)
   }
 
   // Load leitores
@@ -214,10 +223,7 @@ export default function Historico() {
   const fetchTitulos = async () => {
     try {
       setLoadingTitulos(true)
-      const data = await HistoricoService.getTitulosComExemplares(
-        dataInicioTitulos || undefined,
-        dataFimTitulos || undefined,
-      )
+      const data = await HistoricoService.getTitulosComExemplares()
       setTitulosList(data)
     } catch (err: any) {
       toast({
@@ -248,12 +254,12 @@ export default function Historico() {
   }
 
   // Load movimentacoes
-  const fetchMovimentacoes = async () => {
+  const fetchMovimentacoes = async (customInicio?: string, customFim?: string) => {
     try {
       setLoadingMovimentacoes(true)
       const data = await HistoricoService.getMovimentacoesPorData(
-        dataInicioMov || undefined,
-        dataFimMov || undefined,
+        (customInicio !== undefined ? customInicio : dataInicioMov).trim() || undefined,
+        (customFim !== undefined ? customFim : dataFimMov).trim() || undefined,
       )
       setMovimentacoesList(data)
     } catch (err: any) {
@@ -267,9 +273,23 @@ export default function Historico() {
     }
   }
 
+  // Filter movimentações manually via button
+  const handleFilterMovimentacoes = () => {
+    if (!dataInicioMov.trim() || !dataFimMov.trim()) {
+      toast({
+        title: 'Informe a data inicial e final',
+        description:
+          'Por favor, preencha os campos "De" e "Até" com as datas desejadas antes de aplicar o filtro.',
+        variant: 'destructive',
+      })
+      return
+    }
+    fetchMovimentacoes(dataInicioMov, dataFimMov)
+  }
+
   useEffect(() => {
     fetchLogs()
-  }, [tipoFiltroLogs, dataInicioLogs, dataFimLogs])
+  }, [tipoFiltroLogs])
 
   useEffect(() => {
     if (activeTab === 'leitores' && leitoresList.length === 0) {
@@ -594,11 +614,11 @@ export default function Historico() {
 
   // Print/Export PDF function for Logs de Auditoria
   const handlePrintLogs = () => {
-    if (!dataInicioLogs && !dataFimLogs) {
+    if (!dataInicioLogs.trim() || !dataFimLogs.trim()) {
       toast({
-        title: 'Informe o período desejado',
+        title: 'Informe a data desejada',
         description:
-          'Por favor, selecione as datas de início e término antes de gerar o relatório.',
+          'Por favor, selecione os campos "De" e "Até" com a data desejada antes de gerar o relatório.',
         variant: 'destructive',
       })
       return
@@ -719,16 +739,6 @@ export default function Historico() {
 
   // Print/Export PDF function for Títulos e Exemplares
   const handlePrintTitulos = () => {
-    if (!dataInicioTitulos && !dataFimTitulos) {
-      toast({
-        title: 'Informe o período desejado',
-        description:
-          'Por favor, selecione as datas de início e término antes de gerar o relatório.',
-        variant: 'destructive',
-      })
-      return
-    }
-
     const printWindow = window.open('', '_blank')
     if (!printWindow) {
       toast({
@@ -817,11 +827,6 @@ export default function Historico() {
 
     const dateToday = formatDate(new Date())
 
-    const periodText =
-      dataInicioTitulos || dataFimTitulos
-        ? `Período: ${dataInicioTitulos ? formatDate(dataInicioTitulos) : 'Início'} até ${dataFimTitulos ? formatDate(dataFimTitulos) : 'Atual'}`
-        : 'Todos os períodos'
-
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
@@ -891,7 +896,7 @@ export default function Historico() {
           </div>
 
           <div class="footer">
-            <div>Filtro Categoria: <strong>${categoryTitulosFilter === 'all' ? 'Todas' : categoryTitulosFilter}</strong> | ${periodText}</div>
+            <div>Filtro Categoria: <strong>${categoryTitulosFilter === 'all' ? 'Todas' : categoryTitulosFilter}</strong></div>
             <div>Documento gerado pelo sistema Biblioteca CEP</div>
           </div>
           <script>
@@ -1029,11 +1034,11 @@ export default function Historico() {
 
   // Export logs CSV
   const handleExportLogs = () => {
-    if (!dataInicioLogs && !dataFimLogs) {
+    if (!dataInicioLogs.trim() || !dataFimLogs.trim()) {
       toast({
-        title: 'Informe o período desejado',
+        title: 'Informe a data desejada',
         description:
-          'Por favor, selecione as datas de início e término antes de exportar o relatório.',
+          'Por favor, selecione os campos "De" e "Até" com a data desejada antes de exportar o relatório.',
         variant: 'destructive',
       })
       return
@@ -1052,16 +1057,6 @@ export default function Historico() {
 
   // Export titulos CSV
   const handleExportTitulos = () => {
-    if (!dataInicioTitulos && !dataFimTitulos) {
-      toast({
-        title: 'Informe o período desejado',
-        description:
-          'Por favor, selecione as datas de início e término antes de exportar o relatório.',
-        variant: 'destructive',
-      })
-      return
-    }
-
     const exportData: any[] = []
     filteredTitulos.forEach((t) => {
       const exemplares = t.exemplar || []
@@ -1094,11 +1089,11 @@ export default function Historico() {
 
   // Export movimentacoes CSV
   const handleExportMovimentacoes = () => {
-    if (!dataInicioMov && !dataFimMov) {
+    if (!dataInicioMov.trim() || !dataFimMov.trim()) {
       toast({
-        title: 'Informe o período desejado',
+        title: 'Informe a data desejada',
         description:
-          'Por favor, selecione as datas de início e término antes de exportar o relatório.',
+          'Por favor, selecione os campos "De" e "Até" com a data desejada antes de exportar o relatório.',
         variant: 'destructive',
       })
       return
@@ -1118,11 +1113,11 @@ export default function Historico() {
 
   // Print/Export PDF function for Movimentações
   const handlePrintMovimentacoes = () => {
-    if (!dataInicioMov && !dataFimMov) {
+    if (!dataInicioMov.trim() || !dataFimMov.trim()) {
       toast({
-        title: 'Informe o período desejado',
+        title: 'Informe a data desejada',
         description:
-          'Por favor, selecione as datas de início e término antes de gerar o relatório.',
+          'Por favor, selecione os campos "De" e "Até" com a data desejada antes de gerar o relatório.',
         variant: 'destructive',
       })
       return
@@ -1718,6 +1713,14 @@ export default function Historico() {
                     placeholder="dd/mm/aaaa"
                     className="flex-1"
                   />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleFilterLogs}
+                    className="h-9 px-3 shrink-0"
+                  >
+                    Filtrar
+                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -1798,8 +1801,8 @@ export default function Historico() {
                     Relatório de Títulos com Exemplares
                   </CardTitle>
                   <CardDescription>
-                    Listagem consolidada de todas as obras cadastradas com filtro por período,
-                    totalizadores por categoria e exemplares físicos vinculados.
+                    Listagem consolidada de todas as obras cadastradas com totalizadores por
+                    categoria e exemplares físicos vinculados.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1908,8 +1911,8 @@ export default function Historico() {
                 </div>
               </div>
 
-              {/* Filtros com Período no mesmo padrão do relatório de Movimentações */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4">
+              {/* Filtros de Títulos (sem filtro de datas) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -1934,32 +1937,9 @@ export default function Historico() {
                   </SelectContent>
                 </Select>
 
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-medium shrink-0">De:</span>
-                  <DatePickerBR
-                    value={dataInicioTitulos}
-                    onChange={setDataInicioTitulos}
-                    placeholder="dd/mm/aaaa"
-                    className="flex-1"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-medium shrink-0">Até:</span>
-                  <DatePickerBR
-                    value={dataFimTitulos}
-                    onChange={setDataFimTitulos}
-                    placeholder="dd/mm/aaaa"
-                    className="flex-1"
-                  />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={fetchTitulos}
-                    className="h-9 px-3 shrink-0"
-                  >
-                    Filtrar
-                  </Button>
+                <div className="text-sm text-muted-foreground flex items-center justify-end">
+                  Total de títulos:{' '}
+                  <strong className="ml-1 text-foreground">{filteredTitulos.length}</strong>
                 </div>
               </div>
 
@@ -2504,7 +2484,7 @@ export default function Historico() {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={fetchMovimentacoes}
+                    onClick={handleFilterMovimentacoes}
                     className="h-9 px-3 shrink-0"
                   >
                     Filtrar
