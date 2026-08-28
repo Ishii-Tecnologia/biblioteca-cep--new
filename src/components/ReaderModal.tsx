@@ -43,6 +43,7 @@ export function ReaderModal({
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
   const [cpfError, setCpfError] = useState<string | null>(null)
+  const [emailError, setEmailError] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     nome_do_leitor: '',
@@ -55,6 +56,7 @@ export function ReaderModal({
 
   useEffect(() => {
     setCpfError(null)
+    setEmailError(null)
     if (readerToEdit) {
       setFormData({
         nome_do_leitor: readerToEdit.nome_do_leitor,
@@ -136,8 +138,12 @@ export function ReaderModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setCpfError(null)
+    setEmailError(null)
 
-    if (!formData.nome_do_leitor.trim()) {
+    const cleanNome = formData.nome_do_leitor.trim()
+    const cleanEmail = formData.email.trim().toLowerCase()
+
+    if (!cleanNome) {
       toast({
         title: 'Nome obrigatório',
         description: 'O campo Nome Completo é obrigatório.',
@@ -146,13 +152,42 @@ export function ReaderModal({
       return
     }
 
-    if (!readerToEdit && !formData.email.trim()) {
-      toast({
-        title: 'E-mail obrigatório',
-        description: 'O endereço de e-mail é obrigatório para novos cadastros.',
-        variant: 'destructive',
-      })
-      return
+    if (!readerToEdit) {
+      if (!cleanEmail) {
+        toast({
+          title: 'E-mail obrigatório',
+          description: 'O endereço de e-mail é obrigatório para novos cadastros de leitores.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(cleanEmail)) {
+        setEmailError('Formato de e-mail inválido')
+        toast({
+          title: 'E-mail inválido',
+          description: 'Por favor, informe um endereço de e-mail válido.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      // Validação de duplicidade de e-mail no sistema
+      try {
+        const emailExists = await LeitoresService.checkEmailExists(cleanEmail)
+        if (emailExists) {
+          setEmailError('E-mail já cadastrado')
+          toast({
+            title: 'E-mail já cadastrado',
+            description: `O e-mail "${cleanEmail}" já está em uso no sistema. Como ele é o identificador de login de acesso, cada leitor deve possuir um e-mail exclusivo.`,
+            variant: 'destructive',
+          })
+          return
+        }
+      } catch (checkEmailErr) {
+        console.warn('Erro ao verificar email:', checkEmailErr)
+      }
     }
 
     const cleanCpf = formData.cpf.replace(/\D/g, '')
@@ -344,11 +379,13 @@ export function ReaderModal({
                     ? 'E-mail (Login de Entrada - Não Editável)'
                     : 'E-mail Institucional ou Pessoal *'}
                 </Label>
-                {readerToEdit && (
+                {readerToEdit ? (
                   <span className="text-[11px] font-medium text-amber-700 flex items-center gap-1">
                     <Info className="w-3 h-3" /> Login Bloqueado
                   </span>
-                )}
+                ) : emailError ? (
+                  <span className="text-[11px] font-medium text-rose-600">{emailError}</span>
+                ) : null}
               </div>
               <Input
                 id="email"
@@ -358,11 +395,16 @@ export function ReaderModal({
                 disabled={!!readerToEdit}
                 placeholder="Ex: maria.santos@escola.br"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, email: e.target.value })
+                  setEmailError(null)
+                }}
                 className={`mt-1 text-xs ${
                   readerToEdit
                     ? 'bg-slate-100 text-slate-500 cursor-not-allowed border-slate-200 select-none'
-                    : ''
+                    : emailError
+                      ? 'border-rose-500 focus-visible:ring-rose-500'
+                      : ''
                 }`}
               />
               {readerToEdit ? (
@@ -376,7 +418,7 @@ export function ReaderModal({
                 </div>
               ) : (
                 <p className="text-[11px] text-slate-500 mt-1">
-                  Este e-mail será utilizado como identificador de login de acesso.
+                  Este e-mail será utilizado como identificador único de login no sistema.
                 </p>
               )}
             </div>

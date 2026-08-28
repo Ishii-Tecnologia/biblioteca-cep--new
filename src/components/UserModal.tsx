@@ -152,6 +152,29 @@ export function UserModal({ open, onOpenChange, onSuccess }: UserModalProps) {
 
     setLoading(true)
     try {
+      const normalizedEmail = email.toLowerCase()
+
+      // 1. Validação prévia de duplicidade de e-mail (usado como login no sistema)
+      try {
+        const { data: emailInUse, error: checkErr } = await (supabase.rpc as any)(
+          'check_email_exists',
+          {
+            check_email: normalizedEmail,
+          },
+        )
+        if (!checkErr && emailInUse) {
+          toast({
+            title: 'E-mail já cadastrado',
+            description: `O e-mail "${normalizedEmail}" já está em uso por outro usuário ou leitor no sistema. Como o e-mail é o identificador de login, cada conta deve possuir um e-mail único.`,
+            variant: 'destructive',
+          })
+          setLoading(false)
+          return
+        }
+      } catch (checkRpcErr) {
+        console.warn('Erro ao verificar email duplicado via RPC:', checkRpcErr)
+      }
+
       // Upload de avatar comprimido para o bucket 'avatars' (max 400px, 80% qualidade)
       let uploadedAvatarUrl = ''
       if (photoFile) {
@@ -163,9 +186,9 @@ export function UserModal({ open, onOpenChange, onSuccess }: UserModalProps) {
         })
       }
 
-      // 1. Chamar supabase.auth.signUp com metadata
+      // 2. Chamar supabase.auth.signUp com metadata
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
+        email: normalizedEmail,
         password,
         options: {
           data: {
@@ -179,7 +202,18 @@ export function UserModal({ open, onOpenChange, onSuccess }: UserModalProps) {
         },
       })
 
-      if (authError) throw authError
+      if (authError) {
+        const msg = authError.message?.toLowerCase() || ''
+        if (msg.includes('already registered') || msg.includes('user already exists')) {
+          toast({
+            title: 'E-mail já cadastrado',
+            description: `O e-mail "${normalizedEmail}" já possui uma conta no sistema. Por favor, utilize outro e-mail.`,
+            variant: 'destructive',
+          })
+          return
+        }
+        throw authError
+      }
 
       const userId = authData.user?.id
 

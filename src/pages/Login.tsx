@@ -65,11 +65,39 @@ export default function Login() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!regEmail || !regPassword) {
-      toast({ title: 'Atenção', description: 'Preencha todos os campos.', variant: 'destructive' })
+    const cleanName = regName.trim()
+    const cleanEmail = regEmail.trim().toLowerCase()
+    const password = regPassword
+
+    if (!cleanName) {
+      toast({
+        title: 'Nome obrigatório',
+        description: 'Por favor, preencha seu nome completo.',
+        variant: 'destructive',
+      })
       return
     }
-    if (regPassword.length < 6) {
+
+    if (!cleanEmail) {
+      toast({
+        title: 'E-mail obrigatório',
+        description: 'Por favor, informe seu endereço de e-mail.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(cleanEmail)) {
+      toast({
+        title: 'E-mail inválido',
+        description: 'Por favor, insira um formato de e-mail válido (ex: seu.email@exemplo.com).',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!password || password.length < 6) {
       toast({
         title: 'Senha muito curta',
         description: 'A senha deve ter pelo menos 6 caracteres.',
@@ -80,14 +108,19 @@ export default function Login() {
 
     setLoading(true)
     try {
-      const { error } = await signUp(regEmail, regPassword, regName, 'leitor')
+      const { error } = await signUp(cleanEmail, password, cleanName, 'leitor', true)
       if (error) {
-        toast({ title: 'Erro ao cadastrar', description: error.message, variant: 'destructive' })
+        toast({
+          title: error.isDuplicateEmail ? 'E-mail já cadastrado' : 'Erro ao cadastrar',
+          description: error.message || 'Não foi possível concluir o cadastro.',
+          variant: 'destructive',
+        })
       } else {
         toast({
-          title: 'Conta criada!',
-          description: 'Cadastro realizado com sucesso. Você já pode acessar.',
+          title: 'Conta criada com sucesso!',
+          description: `Bem-vindo(a), ${cleanName}! Você foi conectado(a) automaticamente.`,
         })
+        // Login automático já efetuado internamente, redireciona para a tela pretendida
         navigate(from, { replace: true })
       }
     } finally {

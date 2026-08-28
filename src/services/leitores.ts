@@ -108,6 +108,57 @@ export const LeitoresService = {
     return (data || []).length > 0
   },
 
+  async checkEmailExists(email: string, excludeIdLeitor?: number): Promise<boolean> {
+    const normalized = email.trim().toLowerCase()
+    if (!normalized) return false
+
+    // 1. Tentar verificar via RPC abrangente (auth.users, profiles, leitor)
+    try {
+      const { data: rpcExists, error: rpcError } = await (supabase.rpc as any)(
+        'check_email_exists',
+        {
+          check_email: normalized,
+        },
+      )
+      if (!rpcError && typeof rpcExists === 'boolean') {
+        if (rpcExists) {
+          // Se estamos excluindo o próprio leitor na edição, checar se o email é do próprio
+          if (excludeIdLeitor) {
+            const { data: ownData } = await supabase
+              .from('leitor')
+              .select('id_leitor, email')
+              .eq('id_leitor', excludeIdLeitor)
+              .maybeSingle()
+            if (ownData && ownData.email?.trim().toLowerCase() === normalized) {
+              return false
+            }
+          }
+          return true
+        }
+        return false
+      }
+    } catch (e) {
+      console.warn('Fallback para checagem direta de email:', e)
+    }
+
+    // 2. Fallback de verificação em leitor e profiles
+    let leitorQuery = supabase.from('leitor').select('id_leitor').ilike('email', normalized)
+
+    if (excludeIdLeitor) {
+      leitorQuery = leitorQuery.neq('id_leitor', excludeIdLeitor)
+    }
+
+    const { data: leitorData } = await leitorQuery
+    if (leitorData && leitorData.length > 0) return true
+
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('id')
+      .ilike('email', normalized)
+
+    return (profileData && profileData.length > 0) || false
+  },
+
   async create(leitor: LeitorInsert) {
     const { data, error } = await supabase
       .from('leitor')

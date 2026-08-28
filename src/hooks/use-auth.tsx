@@ -25,10 +25,12 @@ interface AuthContextType {
     password: string,
     fullName?: string,
     role?: UserRole,
-  ) => Promise<{ error: any }>
-  signIn: (email: string, password: string) => Promise<{ error: any }>
+    autoSignIn?: boolean,
+  ) => Promise<{ error: any; data?: any }>
+  signIn: (email: string, password: string) => Promise<{ error: any; data?: any }>
   signOut: () => Promise<{ error: any }>
   quickLoginAs: (role: 'admin' | 'leitor') => Promise<{ error: any }>
+  checkEmailInUse: (email: string, excludeUserId?: string) => Promise<boolean>
   loading: boolean
   refreshProfile: () => Promise<void>
 }
@@ -136,26 +138,107 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }
 
+  const checkEmailInUse = async (email: string, excludeUserId?: string): Promise<boolean> => {
+    const normalized = email.trim().toLowerCase()
+    if (!normalized) return false
+
+    try {
+      const { data: exists, error } = await (supabase.rpc as any)('check_email_exists', {
+        check_email: normalized,
+        exclude_user_id: excludeUserId || null,
+      })
+      if (!error && typeof exists === 'boolean') {
+        return exists
+      }
+    } catch (e) {
+      console.warn('RPC check_email_exists error:', e)
+    }
+
+    // Fallback checks
+    try {
+      const { data: p } = await supabase.from('profiles').select('id').ilike('email', normalized)
+      if (p && p.length > 0) {
+        if (excludeUserId && p.some((x) => x.id === excludeUserId)) {
+          // It's the excluded user
+        } else {
+          return true
+        }
+      }
+
+      const { data: l } = await supabase
+        .from('leitor')
+        .select('id_leitor, id_auth')
+        .ilike('email', normalized)
+      if (l && l.length > 0) {
+        if (excludeUserId && l.some((x) => x.id_auth === excludeUserId)) {
+          // It's the excluded user
+        } else {
+          return true
+        }
+      }
+    } catch (e) {
+      console.warn('Fallback email check error:', e)
+    }
+
+    return false
+  }
+
   const signUp = async (
     email: string,
     password: string,
     fullName?: string,
     role: UserRole = 'leitor',
+    autoSignIn: boolean = true,
   ) => {
+    const cleanEmail = email.trim().toLowerCase()
+    const cleanName = (fullName || email.split('@')[0]).trim()
+
+    // 1. Pré-validação de e-mail duplicado
+    const emailExists = await checkEmailInUse(cleanEmail)
+    if (emailExists) {
+      return {
+        error: {
+          message: `O e-mail "${cleanEmail}" já está cadastrado no sistema. Por favor, utilize outro endereço ou faça login com suas credenciais.`,
+          isDuplicateEmail: true,
+        },
+      }
+    }
+
+    // 2. Realizar cadastro no Supabase Auth
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: cleanEmail,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/`,
         data: {
-          full_name: fullName || email.split('@')[0],
+          full_name: cleanName,
+          nome: cleanName,
           role: role,
+          papel: role,
           app_role: role,
         },
       },
     })
 
-    if (!error && data.user) {
+    if (error) {
+      // Caso o Supabase retorne erro de duplicidade
+      const msg = error.message?.toLowerCase() || ''
+      if (
+        msg.includes('already registered') ||
+        msg.includes('user already exists') ||
+        msg.includes('already been registered')
+      ) {
+        return {
+          error: {
+            message: `O e-mail "${cleanEmail}" já está cadastrado no sistema. Por favor, utilize outro endereço ou faça login.`,
+            isDuplicateEmail: true,
+          },
+        }
+      }
+      return { error }
+    }
+
+    if (data.user) {
       // Auto confirm email via RPC for immediate login
       try {
         await (supabase.rpc as any)('confirm_user_email', { user_id: data.user.id })
@@ -163,27 +246,81 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.warn('Could not auto-confirm reader email via RPC:', rpcErr)
       }
 
-      // Auto create reader entry
+      // Ensure profile row exists
       try {
-        await supabase.from('leitor').insert({
-          id_auth: data.user.id,
-          nome_do_leitor: fullName || email.split('@')[0],
-          email: email,
-          cpf: '',
-          data_cadastro: new Date().toISOString().split('T')[0],
-          bloqueado: false,
-        })
-      } catch (err) {
-        console.warn('Could not auto-insert reader:', err)
+        await supabase.from('profiles').upsert(
+          {
+            id: data.user.id,
+            email: cleanEmail,
+            nome: cleanName,
+            full_name: cleanName,
+            papel: role,
+            role: role,
+            bloqueado: false,
+          },
+          { onConflict: 'id' },
+        )
+      } catch (profileErr) {
+        console.warn('Could not upsert profile:', profileErr)
+      }
+
+      // Auto create reader entry if role is leitor
+      if (role === 'leitor') {
+        try {
+          // Check if a leitor row already exists with this email or id_auth
+          const { data: existingLeitor } = await supabase
+            .from('leitor')
+            .select('id_leitor')
+            .or(`id_auth.eq.${data.user.id},email.eq.${cleanEmail}`)
+            .maybeSingle()
+
+          if (!existingLeitor) {
+            await supabase.from('leitor').insert({
+              id_auth: data.user.id,
+              nome_do_leitor: cleanName,
+              email: cleanEmail,
+              cpf: '',
+              data_cadastro: new Date().toISOString().split('T')[0],
+              bloqueado: false,
+            })
+          } else {
+            await supabase
+              .from('leitor')
+              .update({ id_auth: data.user.id, nome_do_leitor: cleanName })
+              .eq('id_leitor', existingLeitor.id_leitor)
+          }
+        } catch (err) {
+          console.warn('Could not auto-insert/update reader:', err)
+        }
+      }
+
+      // Login automático imediato caso autoSignIn seja true e ainda não esteja com sessão
+      if (autoSignIn && !data.session) {
+        try {
+          const signInRes = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password,
+          })
+          if (signInRes.data?.session) {
+            setSession(signInRes.data.session)
+            setUser(signInRes.data.user)
+            await fetchProfile(signInRes.data.user)
+          }
+        } catch (autoLoginErr) {
+          console.warn('Auto sign in error after sign up:', autoLoginErr)
+        }
       }
     }
 
-    return { error }
+    return { error: null, data }
   }
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    return { error }
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
+    return { data, error }
   }
 
   const quickLoginAs = async (targetRole: 'admin' | 'leitor') => {
@@ -218,6 +355,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signIn,
         signOut,
         quickLoginAs,
+        checkEmailInUse,
         loading,
         refreshProfile,
       }}
