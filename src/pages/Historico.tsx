@@ -112,17 +112,38 @@ export default function Historico() {
   const [tipoMovFilter, setTipoMovFilter] = useState('all')
   const [searchMov, setSearchMov] = useState('')
 
-  // --- SELEÇÃO DE COLUNAS PARA IMPRESSÃO / PDF ---
-  const [colsLogs, setColsLogs] = useState({
+  // --- CHAVES LOCALSTORAGE PARA PERSISTÊNCIA DE COLUNAS ---
+  const STORAGE_KEYS = {
+    logs: 'biblioteca_cep_relatorio_cols_logs',
+    leitores: 'biblioteca_cep_relatorio_cols_leitores',
+    titulos: 'biblioteca_cep_relatorio_cols_titulos',
+    usuarios: 'biblioteca_cep_relatorio_cols_usuarios',
+    movimentacoes: 'biblioteca_cep_relatorio_cols_movimentacoes',
+  }
+
+  // --- SELEÇÃO DE COLUNAS PARA IMPRESSÃO / PDF (COM PERSISTÊNCIA) ---
+  const defaultColsLogs = {
     data_hora: true,
     operacao: true,
     exemplar: true,
     leitor: true,
     operador: true,
     detalhes: true,
+  }
+
+  const [colsLogs, setColsLogs] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.logs)
+      if (saved) {
+        return { ...defaultColsLogs, ...JSON.parse(saved) }
+      }
+    } catch (e) {
+      console.error('Erro ao ler colunas de logs do localStorage', e)
+    }
+    return defaultColsLogs
   })
 
-  const [colsLeitores, setColsLeitores] = useState({
+  const defaultColsLeitores = {
     id: true,
     nome: true,
     cpf: true,
@@ -131,9 +152,21 @@ export default function Historico() {
     status: true,
     emprestimos: true,
     data_cadastro: true,
+  }
+
+  const [colsLeitores, setColsLeitores] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.leitores)
+      if (saved) {
+        return { ...defaultColsLeitores, ...JSON.parse(saved) }
+      }
+    } catch (e) {
+      console.error('Erro ao ler colunas de leitores do localStorage', e)
+    }
+    return defaultColsLeitores
   })
 
-  const [colsTitulos, setColsTitulos] = useState({
+  const defaultColsTitulos = {
     codigo: true,
     titulo: true,
     autor: true,
@@ -141,18 +174,42 @@ export default function Historico() {
     editora: true,
     total_exemplares: true,
     detalhes_exemplares: true,
+  }
+
+  const [colsTitulos, setColsTitulos] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.titulos)
+      if (saved) {
+        return { ...defaultColsTitulos, ...JSON.parse(saved) }
+      }
+    } catch (e) {
+      console.error('Erro ao ler colunas de titulos do localStorage', e)
+    }
+    return defaultColsTitulos
   })
 
-  const [colsUsuarios, setColsUsuarios] = useState({
+  const defaultColsUsuarios = {
     nome: true,
     email: true,
     telefone: true,
     papel: true,
     status: true,
     data_cadastro: true,
+  }
+
+  const [colsUsuarios, setColsUsuarios] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.usuarios)
+      if (saved) {
+        return { ...defaultColsUsuarios, ...JSON.parse(saved) }
+      }
+    } catch (e) {
+      console.error('Erro ao ler colunas de usuários do localStorage', e)
+    }
+    return defaultColsUsuarios
   })
 
-  const [colsMovimentacoes, setColsMovimentacoes] = useState({
+  const defaultColsMovimentacoes = {
     tipo: true,
     data_evento: true,
     titulo_livro: true,
@@ -160,7 +217,60 @@ export default function Historico() {
     leitor: true,
     status: true,
     detalhes: true,
+  }
+
+  const [colsMovimentacoes, setColsMovimentacoes] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.movimentacoes)
+      if (saved) {
+        return { ...defaultColsMovimentacoes, ...JSON.parse(saved) }
+      }
+    } catch (e) {
+      console.error('Erro ao ler colunas de movimentações do localStorage', e)
+    }
+    return defaultColsMovimentacoes
   })
+
+  // Efeitos para persistir quando o usuário altera qualquer seleção de colunas
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.logs, JSON.stringify(colsLogs))
+    } catch (e) {
+      console.error('Erro ao salvar colunas de logs no localStorage', e)
+    }
+  }, [colsLogs])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.leitores, JSON.stringify(colsLeitores))
+    } catch (e) {
+      console.error('Erro ao salvar colunas de leitores no localStorage', e)
+    }
+  }, [colsLeitores])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.titulos, JSON.stringify(colsTitulos))
+    } catch (e) {
+      console.error('Erro ao salvar colunas de títulos no localStorage', e)
+    }
+  }, [colsTitulos])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.usuarios, JSON.stringify(colsUsuarios))
+    } catch (e) {
+      console.error('Erro ao salvar colunas de usuários no localStorage', e)
+    }
+  }, [colsUsuarios])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.movimentacoes, JSON.stringify(colsMovimentacoes))
+    } catch (e) {
+      console.error('Erro ao salvar colunas de movimentações no localStorage', e)
+    }
+  }, [colsMovimentacoes])
 
   // Check admin
   const isAdmin = profile?.role === 'admin'
