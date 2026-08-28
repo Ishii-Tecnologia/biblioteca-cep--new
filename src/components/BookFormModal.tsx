@@ -23,8 +23,11 @@ import {
   Image as ImageIcon,
   X,
   ClipboardPaste,
+  Barcode,
 } from 'lucide-react'
 import { uploadImageToStorage } from '@/lib/image-upload'
+import { BarcodeScannerModal } from '@/components/BarcodeScannerModal'
+import { BookMetadata } from '@/services/isbn'
 
 interface BookFormModalProps {
   open: boolean
@@ -40,6 +43,7 @@ export function BookFormModal({ open, onOpenChange, bookToEdit, onSuccess }: Boo
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [categoriesList, setCategoriesList] = useState<Categoria[]>([])
+  const [barcodeModalOpen, setBarcodeModalOpen] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -169,6 +173,39 @@ export function BookFormModal({ open, onOpenChange, bookToEdit, onSuccess }: Boo
     }
   }
 
+  const handleBookFoundByBarcode = async (book: BookMetadata) => {
+    // Fill formData with fetched book info
+    setFormData((prev) => ({
+      ...prev,
+      titulo_de_livro: book.titulo_de_livro || prev.titulo_de_livro,
+      autor: book.autor || prev.autor,
+      editora: book.editora || prev.editora,
+      ano_publicacao: book.ano_publicacao || prev.ano_publicacao,
+      isbn: book.isbn || prev.isbn,
+      categoria: book.categoria || prev.categoria || 'Geral',
+      sinopse: book.sinopse || prev.sinopse,
+      capa_url: book.capa_url || prev.capa_url,
+    }))
+
+    if (book.capa_url) {
+      setCoverPreview(book.capa_url)
+      setCoverFile(null)
+    }
+
+    // Automatically generate code if author is found and id_titulo is empty
+    if (book.autor && !formData.id_titulo && !bookToEdit) {
+      try {
+        const generatedCode = await TitulosService.generateId(
+          book.autor,
+          book.titulo_de_livro || '',
+        )
+        setFormData((prev) => ({ ...prev, id_titulo: generatedCode }))
+      } catch {
+        /* intentionally ignored */
+      }
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formData.titulo_de_livro.trim() || !formData.autor.trim()) {
@@ -255,6 +292,34 @@ export function BookFormModal({ open, onOpenChange, bookToEdit, onSuccess }: Boo
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
+            {/* Botão de Leitura de Código de Barras / ISBN */}
+            {!bookToEdit && (
+              <div className="flex items-center justify-between p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-emerald-600 text-white rounded-md">
+                    <Barcode className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-950">
+                      Preenchimento Automático por Código de Barras
+                    </p>
+                    <p className="text-[11px] text-emerald-800">
+                      Aponte a câmera para o ISBN no verso do livro para importar os dados.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setBarcodeModalOpen(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 shadow-xs"
+                >
+                  <Barcode className="w-3.5 h-3.5" />
+                  Ler Código de Barras
+                </Button>
+              </div>
+            )}
+
             {/* Upload de Capa */}
             <div
               onPaste={handlePaste}
@@ -539,6 +604,12 @@ export function BookFormModal({ open, onOpenChange, bookToEdit, onSuccess }: Boo
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <BarcodeScannerModal
+        open={barcodeModalOpen}
+        onOpenChange={setBarcodeModalOpen}
+        onBookFound={handleBookFoundByBarcode}
+      />
     </Dialog>
   )
 }

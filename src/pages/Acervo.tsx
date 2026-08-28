@@ -33,6 +33,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { BookFormModal } from '@/components/BookFormModal'
+import { BarcodeScannerModal } from '@/components/BarcodeScannerModal'
+import { BookMetadata } from '@/services/isbn'
 import { CopiesModal } from '@/components/CopiesModal'
 import { LoanModal } from '@/components/LoanModal'
 import { ReserveModal } from '@/components/ReserveModal'
@@ -115,6 +117,7 @@ export default function Acervo() {
   // Modals state
   const [bookModalOpen, setBookModalOpen] = useState(false)
   const [bookToEdit, setBookToEdit] = useState<Titulo | null>(null)
+  const [barcodeModalOpen, setBarcodeModalOpen] = useState(false)
 
   const [copiesModalOpen, setCopiesModalOpen] = useState(false)
   const [selectedBookForCopies, setSelectedBookForCopies] = useState<Titulo | null>(null)
@@ -169,6 +172,24 @@ export default function Acervo() {
 
   const handleNewBook = () => {
     setBookToEdit(null)
+    setBookModalOpen(true)
+  }
+
+  const handleBookScannedDirectly = (book: BookMetadata) => {
+    setBookToEdit({
+      id_titulo: '',
+      titulo_de_livro: book.titulo_de_livro,
+      autor: book.autor,
+      editora: book.editora || null,
+      ano_publicacao: book.ano_publicacao || null,
+      isbn: book.isbn || null,
+      categoria: book.categoria || 'Geral',
+      sinopse: book.sinopse || null,
+      vol: 0,
+      capa_url: book.capa_url || null,
+      ativo: true,
+      created_at: new Date().toISOString(),
+    })
     setBookModalOpen(true)
   }
 
@@ -230,13 +251,23 @@ export default function Acervo() {
         </div>
 
         {isOperadorOrAdmin && (
-          <Button
-            onClick={handleNewBook}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium gap-2 shadow-sm"
-          >
-            <PlusCircle className="w-4 h-4" />
-            Cadastrar Novo Livro
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              onClick={() => setBarcodeModalOpen(true)}
+              variant="outline"
+              className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-medium gap-2 shadow-xs"
+            >
+              <Search className="w-4 h-4" />
+              Ler Código de Barras
+            </Button>
+            <Button
+              onClick={handleNewBook}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium gap-2 shadow-sm"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Cadastrar Novo Livro
+            </Button>
+          </div>
         )}
       </div>
 
@@ -485,6 +516,12 @@ export default function Acervo() {
         onOpenChange={setBookModalOpen}
         bookToEdit={bookToEdit}
         onSuccess={loadBooks}
+      />
+
+      <BarcodeScannerModal
+        open={barcodeModalOpen}
+        onOpenChange={setBarcodeModalOpen}
+        onBookFound={handleBookScannedDirectly}
       />
 
       <CopiesModal

@@ -169,10 +169,14 @@ export default function Historico() {
 
   // Load logs
   const fetchLogs = async () => {
+    // Quando o filtro de tipo estiver marcado como "todos", o relatório deve listar TUDO que está na tabela,
+    // respeitando o filtro de datas se estiver definido.
+    // Se nenhum filtro de tipo foi selecionado (ou "todos") e não há datas, limit=0 (sem limite) busca tudo da tabela.
     try {
       setLoadingLogs(true)
+      const limit = tipoFiltroLogs === 'todos' && !dataInicioLogs && !dataFimLogs ? 0 : 300
       const data = await HistoricoService.getAll(
-        300,
+        limit,
         tipoFiltroLogs,
         dataInicioLogs || undefined,
         dataFimLogs || undefined,
@@ -590,6 +594,16 @@ export default function Historico() {
 
   // Print/Export PDF function for Logs de Auditoria
   const handlePrintLogs = () => {
+    if (!dataInicioLogs && !dataFimLogs) {
+      toast({
+        title: 'Informe o período desejado',
+        description:
+          'Por favor, selecione as datas de início e término antes de gerar o relatório.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const printWindow = window.open('', '_blank')
     if (!printWindow) {
       toast({
@@ -705,6 +719,16 @@ export default function Historico() {
 
   // Print/Export PDF function for Títulos e Exemplares
   const handlePrintTitulos = () => {
+    if (!dataInicioTitulos && !dataFimTitulos) {
+      toast({
+        title: 'Informe o período desejado',
+        description:
+          'Por favor, selecione as datas de início e término antes de gerar o relatório.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const printWindow = window.open('', '_blank')
     if (!printWindow) {
       toast({
@@ -1005,6 +1029,16 @@ export default function Historico() {
 
   // Export logs CSV
   const handleExportLogs = () => {
+    if (!dataInicioLogs && !dataFimLogs) {
+      toast({
+        title: 'Informe o período desejado',
+        description:
+          'Por favor, selecione as datas de início e término antes de exportar o relatório.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const exportData = filteredLogs.map((l) => ({
       Data_Hora: formatDateTime(l.data_hora),
       Operação: l.tipo_operacao,
@@ -1018,6 +1052,16 @@ export default function Historico() {
 
   // Export titulos CSV
   const handleExportTitulos = () => {
+    if (!dataInicioTitulos && !dataFimTitulos) {
+      toast({
+        title: 'Informe o período desejado',
+        description:
+          'Por favor, selecione as datas de início e término antes de exportar o relatório.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const exportData: any[] = []
     filteredTitulos.forEach((t) => {
       const exemplares = t.exemplar || []
@@ -1050,6 +1094,16 @@ export default function Historico() {
 
   // Export movimentacoes CSV
   const handleExportMovimentacoes = () => {
+    if (!dataInicioMov && !dataFimMov) {
+      toast({
+        title: 'Informe o período desejado',
+        description:
+          'Por favor, selecione as datas de início e término antes de exportar o relatório.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const exportData = filteredMovimentacoes.map((m) => ({
       Tipo: m.tipo_registro,
       Data_Evento: formatDate(m.data_evento),
@@ -1064,6 +1118,16 @@ export default function Historico() {
 
   // Print/Export PDF function for Movimentações
   const handlePrintMovimentacoes = () => {
+    if (!dataInicioMov && !dataFimMov) {
+      toast({
+        title: 'Informe o período desejado',
+        description:
+          'Por favor, selecione as datas de início e término antes de gerar o relatório.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const printWindow = window.open('', '_blank')
     if (!printWindow) {
       toast({
