@@ -119,7 +119,7 @@ export default function Index() {
                 <Repeat className="w-4 h-4" />
                 Novo Empréstimo
               </Button>
-            ) : (
+            ) : user ? (
               <Button
                 onClick={() => setReserveModalOpen(true)}
                 variant="outline"
@@ -128,7 +128,7 @@ export default function Index() {
                 <BookmarkCheck className="w-4 h-4 text-emerald-300" />
                 Fazer Reserva
               </Button>
-            )}
+            ) : null}
 
             {isOperadorOrAdmin && (
               <Button
