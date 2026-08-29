@@ -132,27 +132,15 @@ export function CopiesModal({
     switch (status) {
       case 'Disponivel':
         return (
-          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-100 hover:text-emerald-800">
-            Disponível
-          </Badge>
+          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">Disponível</Badge>
         )
       case 'Emprestado':
-        return (
-          <Badge className="bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-100 hover:text-amber-800">
-            Emprestado
-          </Badge>
-        )
+        return <Badge className="bg-amber-100 text-amber-800 border-amber-300">Emprestado</Badge>
       case 'Manutencao':
-        return (
-          <Badge className="bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-100 hover:text-rose-800">
-            Em Manutenção
-          </Badge>
-        )
+        return <Badge className="bg-rose-100 text-rose-800 border-rose-300">Em Manutenção</Badge>
       case 'Perdido':
         return (
-          <Badge className="bg-slate-200 text-slate-800 border-slate-300 hover:bg-slate-200 hover:text-slate-800">
-            Perdido / Baixado
-          </Badge>
+          <Badge className="bg-slate-200 text-slate-800 border-slate-300">Perdido / Baixado</Badge>
         )
       default:
         return <Badge variant="outline">{status}</Badge>

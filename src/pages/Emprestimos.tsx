@@ -256,17 +256,17 @@ export default function Emprestimos() {
                         {loan.id_exemplar}
                       </span>
                       {isReturned ? (
-                        <Badge className="bg-slate-100 hover:bg-slate-100 text-slate-700 border-slate-300 gap-1 text-[11px] shadow-none select-none pointer-events-none">
+                        <Badge className="bg-slate-100 text-slate-700 border-slate-300 gap-1 text-[11px] shadow-none select-none">
                           <CheckCircle2 className="w-3 h-3 text-slate-500" />
                           Devolvido em {formatDate(loan.data_devolucao_real)}
                         </Badge>
                       ) : isOverdue ? (
-                        <Badge className="bg-rose-100 hover:bg-rose-100 text-rose-800 border-rose-300 gap-1 text-[11px] shadow-none select-none pointer-events-none">
+                        <Badge className="bg-rose-100 text-rose-800 border-rose-300 gap-1 text-[11px] shadow-none select-none">
                           <AlertTriangle className="w-3 h-3 text-rose-600" />
                           Atrasado ({loan.dias_atraso} dia(s))
                         </Badge>
                       ) : (
-                        <Badge className="bg-emerald-100 hover:bg-emerald-100 text-emerald-800 border-emerald-300 gap-1 text-[11px] shadow-none select-none pointer-events-none">
+                        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 gap-1 text-[11px] shadow-none select-none">
                           <Clock className="w-3 h-3 text-emerald-600" />
                           Emprestado
                         </Badge>
@@ -275,7 +275,7 @@ export default function Emprestimos() {
                       {loan.numero_renovacoes > 0 && (
                         <Badge
                           variant="outline"
-                          className="text-[10px] text-teal-800 bg-teal-50 hover:bg-teal-50 border-teal-200 shadow-none select-none pointer-events-none"
+                          className="text-[10px] text-teal-800 bg-teal-50 border-teal-200 shadow-none select-none"
                         >
                           {loan.numero_renovacoes}x Renovado
                         </Badge>

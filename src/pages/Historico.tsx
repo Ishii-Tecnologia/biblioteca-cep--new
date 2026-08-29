@@ -2145,7 +2145,7 @@ export default function Historico() {
                             {titulo.categoria && (
                               <Badge
                                 variant="outline"
-                                className="bg-muted/50 text-black border-border/80 font-normal hover:bg-muted/50 hover:text-black cursor-default pointer-events-none select-none"
+                                className="bg-muted/50 text-black border-border/80 font-normal select-none"
                               >
                                 {titulo.categoria}
                               </Badge>

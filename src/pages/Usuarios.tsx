@@ -252,20 +252,20 @@ export default function Usuarios() {
     const r = (roleName || 'leitor').toLowerCase()
     if (r === 'admin') {
       return (
-        <Badge className="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs border-purple-700 shadow-xs">
+        <Badge className="bg-purple-600 text-white font-semibold text-xs border-purple-700 shadow-xs">
           admin
         </Badge>
       )
     }
     if (r === 'operador') {
       return (
-        <Badge className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs border-blue-700 shadow-xs">
+        <Badge className="bg-blue-600 text-white font-semibold text-xs border-blue-700 shadow-xs">
           operador
         </Badge>
       )
     }
     return (
-      <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs border-emerald-700 shadow-xs">
+      <Badge className="bg-emerald-600 text-white font-semibold text-xs border-emerald-700 shadow-xs">
         leitor
       </Badge>
     )
