@@ -162,7 +162,11 @@ export function LoanModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[580px]">
+      <DialogContent
+        className="sm:max-w-[580px]"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-900">
@@ -203,7 +207,7 @@ export function LoanModal({
                   />
                   <Select value={selectedExemplar} onValueChange={setSelectedExemplar}>
                     <SelectTrigger className="w-full text-xs rounded-none bg-slate-100 hover:bg-slate-200/80 border-slate-300 text-slate-800 transition-colors">
-                      <SelectValue placeholder="Digite para buscar..." />
+                      <SelectValue placeholder="Digite no filtro acima para buscar..." />
                     </SelectTrigger>
                     <SelectContent className="max-h-60 rounded-none bg-white border-slate-300 shadow-md">
                       {filteredCopies.length === 0 ? (
@@ -260,7 +264,7 @@ export function LoanModal({
                   />
                   <Select value={selectedLeitor} onValueChange={setSelectedLeitor}>
                     <SelectTrigger className="w-full text-xs rounded-none bg-slate-100 hover:bg-slate-200/80 border-slate-300 text-slate-800 transition-colors">
-                      <SelectValue placeholder="Digite para buscar..." />
+                      <SelectValue placeholder="Digite no filtro acima para buscar..." />
                     </SelectTrigger>
                     <SelectContent className="max-h-60 rounded-none bg-white border-slate-300 shadow-md">
                       {filteredReaders.length === 0 ? (
