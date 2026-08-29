@@ -257,6 +257,29 @@ export const LeitoresService = {
       }
     }
 
+    // 2. Verificar se existem reservas ativas pendentes para este leitor
+    const { count: activeReservationsCount, error: activeResError } = await supabase
+      .from('reserva')
+      .select('id_reserva', { count: 'exact', head: true })
+      .eq('id_leitor', id_leitor)
+      .eq('status_reserva', 'Ativa')
+
+    if (activeResError) throw activeResError
+
+    if (activeReservationsCount !== null && activeReservationsCount > 0) {
+      throw new Error('Não é possível excluir leitor com reserva ativa pendente.')
+    }
+
+    // 3. Excluir reservas não ativas (Cancelada ou Atendida) para evitar bloqueio por foreign key (RESTRICT)
+    const { error: deleteResError } = await supabase
+      .from('reserva')
+      .delete()
+      .eq('id_leitor', id_leitor)
+      .in('status_reserva', ['Cancelada', 'Atendida'])
+
+    if (deleteResError) throw deleteResError
+
+    // 4. Excluir o leitor
     const { error } = await supabase.from('leitor').delete().eq('id_leitor', id_leitor)
     if (error) throw error
   },

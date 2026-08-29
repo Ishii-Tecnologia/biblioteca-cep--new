@@ -143,7 +143,7 @@ export default function Leitores() {
     } catch (err: any) {
       toast({
         title: 'Não foi possível excluir',
-        description: err.message || 'Verifique se não há empréstimos pendentes.',
+        description: err.message || 'Verifique se não há empréstimos ou reservas pendentes.',
         variant: 'destructive',
       })
     } finally {
