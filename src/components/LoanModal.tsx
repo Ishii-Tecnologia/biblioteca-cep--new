@@ -203,7 +203,7 @@ export function LoanModal({
                     placeholder="Filtrar livro por título, autor ou código..."
                     value={searchCopy}
                     onChange={(e) => setSearchCopy(e.target.value)}
-                    className="text-xs mb-1.5 h-8"
+                    className="w-1/2 text-xs mb-1.5 h-8"
                   />
                   <Select value={selectedExemplar} onValueChange={setSelectedExemplar}>
                     <SelectTrigger className="w-full text-xs rounded-none bg-slate-100 hover:bg-slate-200/80 border-slate-300 text-slate-800 transition-colors">
@@ -260,7 +260,7 @@ export function LoanModal({
                     placeholder="Filtrar por nome, email ou CPF..."
                     value={searchReader}
                     onChange={(e) => setSearchReader(e.target.value)}
-                    className="text-xs mb-1.5 h-8"
+                    className="w-1/2 text-xs mb-1.5 h-8"
                   />
                   <Select value={selectedLeitor} onValueChange={setSelectedLeitor}>
                     <SelectTrigger className="w-full text-xs rounded-none bg-slate-100 hover:bg-slate-200/80 border-slate-300 text-slate-800 transition-colors">
