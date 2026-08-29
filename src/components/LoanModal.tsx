@@ -199,12 +199,23 @@ export function LoanModal({
                 </Label>
 
                 <div className="mt-1">
-                  <Input
-                    placeholder="Filtrar livro por título, autor ou código..."
-                    value={searchCopy}
-                    onChange={(e) => setSearchCopy(e.target.value)}
-                    className="w-1/2 text-xs mb-1.5 h-8"
-                  />
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Input
+                      placeholder="Filtrar livro por título, autor ou código..."
+                      value={searchCopy}
+                      onChange={(e) => setSearchCopy(e.target.value)}
+                      className="w-1/2 text-xs h-8"
+                    />
+                    {searchCopy.trim() && (
+                      <span className="text-[11px] font-medium text-slate-500">
+                        {filteredCopies.length === 0
+                          ? 'Nenhum exemplar encontrado'
+                          : filteredCopies.length === 1
+                            ? '1 exemplar encontrado'
+                            : `${filteredCopies.length} exemplares encontrados`}
+                      </span>
+                    )}
+                  </div>
                   <Select value={selectedExemplar} onValueChange={setSelectedExemplar}>
                     <SelectTrigger className="w-full text-xs rounded-none bg-slate-100 hover:bg-slate-200/80 border-slate-300 text-slate-800 transition-colors">
                       <SelectValue placeholder="Digite no filtro acima para buscar..." />
@@ -256,12 +267,23 @@ export function LoanModal({
                 </Label>
 
                 <div className="mt-1">
-                  <Input
-                    placeholder="Filtrar por nome, email ou CPF..."
-                    value={searchReader}
-                    onChange={(e) => setSearchReader(e.target.value)}
-                    className="w-1/2 text-xs mb-1.5 h-8"
-                  />
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <Input
+                      placeholder="Filtrar por nome, email ou CPF..."
+                      value={searchReader}
+                      onChange={(e) => setSearchReader(e.target.value)}
+                      className="w-1/2 text-xs h-8"
+                    />
+                    {searchReader.trim() && (
+                      <span className="text-[11px] font-medium text-slate-500">
+                        {filteredReaders.length === 0
+                          ? 'Nenhum leitor encontrado'
+                          : filteredReaders.length === 1
+                            ? '1 leitor encontrado'
+                            : `${filteredReaders.length} leitores encontrados`}
+                      </span>
+                    )}
+                  </div>
                   <Select value={selectedLeitor} onValueChange={setSelectedLeitor}>
                     <SelectTrigger className="w-full text-xs rounded-none bg-slate-100 hover:bg-slate-200/80 border-slate-300 text-slate-800 transition-colors">
                       <SelectValue placeholder="Digite no filtro acima para buscar..." />
