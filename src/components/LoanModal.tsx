@@ -141,6 +141,12 @@ export function LoanModal({
         description: `Exemplar ${selectedExemplar} emprestado para ${selectedReaderObj?.nome_do_leitor || 'Leitor'}. Devolução em ${prazoDias} dias.`,
       })
 
+      // Reset selection state
+      setSelectedExemplar('')
+      setSelectedLeitor('')
+      setSearchCopy('')
+      setSearchReader('')
+
       onSuccess()
       onOpenChange(false)
     } catch (err: any) {
@@ -197,12 +203,14 @@ export function LoanModal({
                   />
                   <Select value={selectedExemplar} onValueChange={setSelectedExemplar}>
                     <SelectTrigger className="w-full text-xs rounded-none bg-slate-100 hover:bg-slate-200/80 border-slate-300 text-slate-800 transition-colors">
-                      <SelectValue placeholder="Selecione um exemplar..." />
+                      <SelectValue placeholder="Digite para buscar..." />
                     </SelectTrigger>
                     <SelectContent className="max-h-60 rounded-none bg-white border-slate-300 shadow-md">
                       {filteredCopies.length === 0 ? (
                         <div className="p-3 text-center text-xs text-slate-500">
-                          Nenhum exemplar disponível encontrado.
+                          {searchCopy.trim()
+                            ? 'Nenhum exemplar disponível encontrado para a busca.'
+                            : 'Nenhum exemplar disponível no momento.'}
                         </div>
                       ) : (
                         filteredCopies.map((copy) => (
@@ -252,12 +260,14 @@ export function LoanModal({
                   />
                   <Select value={selectedLeitor} onValueChange={setSelectedLeitor}>
                     <SelectTrigger className="w-full text-xs rounded-none bg-slate-100 hover:bg-slate-200/80 border-slate-300 text-slate-800 transition-colors">
-                      <SelectValue placeholder="Selecione o leitor cadastrado..." />
+                      <SelectValue placeholder="Digite para buscar..." />
                     </SelectTrigger>
                     <SelectContent className="max-h-60 rounded-none bg-white border-slate-300 shadow-md">
                       {filteredReaders.length === 0 ? (
                         <div className="p-3 text-center text-xs text-slate-500">
-                          Nenhum leitor ativo encontrado.
+                          {searchReader.trim()
+                            ? 'Nenhum leitor ativo encontrado para a busca.'
+                            : 'Nenhum leitor ativo encontrado.'}
                         </div>
                       ) : (
                         filteredReaders.map((reader) => (
