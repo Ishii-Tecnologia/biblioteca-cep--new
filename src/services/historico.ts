@@ -47,7 +47,11 @@ export const HistoricoService = {
     }
 
     if (operationFilter && operationFilter !== 'all' && operationFilter !== 'todos') {
-      query = query.ilike('tipo', operationFilter)
+      if (operationFilter === 'manutencao_todas' || operationFilter === 'Manutenção') {
+        query = query.or('tipo.ilike.%manuten%,tipo.ilike.%manutencao%')
+      } else {
+        query = query.ilike('tipo', operationFilter)
+      }
     }
 
     if (startDate && startDate.trim()) {
@@ -193,7 +197,11 @@ export const HistoricoService = {
     let query = supabase.from('historico').select('id', { count: 'exact', head: true })
 
     if (operationFilter && operationFilter !== 'all') {
-      query = query.ilike('tipo', operationFilter)
+      if (operationFilter === 'manutencao_todas' || operationFilter === 'Manutenção') {
+        query = query.or('tipo.ilike.%manuten%,tipo.ilike.%manutencao%')
+      } else {
+        query = query.ilike('tipo', operationFilter)
+      }
     }
 
     if (startDate && startDate.trim()) {
@@ -239,7 +247,11 @@ export const HistoricoService = {
     let query = supabase.from('historico').delete()
 
     if (opFilter && opFilter !== 'todos') {
-      query = query.eq('tipo', opFilter)
+      if (opFilter === 'manutencao_todas' || opFilter === 'Manutenção') {
+        query = query.or('tipo.ilike.%manuten%,tipo.ilike.%manutencao%')
+      } else {
+        query = query.eq('tipo', opFilter)
+      }
     }
 
     if (start) {

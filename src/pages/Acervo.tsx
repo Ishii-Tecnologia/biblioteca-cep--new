@@ -111,6 +111,7 @@ function BookSinopse({ sinopse }: BookSinopseProps) {
 export default function Acervo() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') || ''
+  const initialStatus = searchParams.get('status') || 'all'
 
   const { isOperadorOrAdmin, isAdmin, user } = useAuth()
   const { toast } = useToast()
@@ -123,6 +124,7 @@ export default function Acervo() {
 
   const [searchQuery, setSearchQuery] = useState(initialQuery)
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
+  const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus)
 
   // Modals state
   const [bookModalOpen, setBookModalOpen] = useState(false)
@@ -157,7 +159,7 @@ export default function Acervo() {
     setLoading(true)
     try {
       const [booksData, catsData, totaisData] = await Promise.all([
-        TitulosService.getAll(searchQuery, selectedCategory, true),
+        TitulosService.getAll(searchQuery, selectedCategory, true, selectedStatus),
         TitulosService.getCategories(),
         TitulosService.getTotais(),
       ])
@@ -176,14 +178,45 @@ export default function Acervo() {
     }
   }
 
+  // Sincronizar parâmetros de URL com os estados se mudarem externamente
+  useEffect(() => {
+    const q = searchParams.get('q') || ''
+    const s = searchParams.get('status') || 'all'
+    setSearchQuery(q)
+    setSelectedStatus(s)
+  }, [searchParams])
+
   useEffect(() => {
     loadBooks()
-  }, [selectedCategory])
+  }, [selectedCategory, selectedStatus])
+
+  const updateFiltersUrl = (newQuery?: string, newCategory?: string, newStatus?: string) => {
+    const nextParams: Record<string, string> = {}
+    const finalQ = newQuery !== undefined ? newQuery : searchQuery
+    const finalS = newStatus !== undefined ? newStatus : selectedStatus
+
+    if (finalQ.trim()) nextParams.q = finalQ.trim()
+    if (finalS && finalS !== 'all') nextParams.status = finalS
+
+    setSearchParams(nextParams)
+  }
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    setSearchParams(searchQuery ? { q: searchQuery } : {})
+    updateFiltersUrl(searchQuery, selectedCategory, selectedStatus)
     loadBooks()
+  }
+
+  const handleStatusChange = (status: string) => {
+    setSelectedStatus(status)
+    updateFiltersUrl(undefined, undefined, status)
+  }
+
+  const handleClearFilters = () => {
+    setSearchQuery('')
+    setSelectedCategory('all')
+    setSelectedStatus('all')
+    setSearchParams({})
   }
 
   const handleEditBook = (book: TituloWithStats) => {
@@ -352,7 +385,21 @@ export default function Acervo() {
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200 shadow-2xs bg-white col-span-2 sm:col-span-1">
+          <Card
+            className={`border-slate-200 shadow-2xs bg-white col-span-2 sm:col-span-1 cursor-pointer transition-all hover:border-rose-300 hover:shadow-xs ${
+              selectedStatus === 'Manutencao' || selectedStatus === 'manutencao'
+                ? 'ring-2 ring-rose-500 border-rose-400 bg-rose-50/20'
+                : ''
+            }`}
+            onClick={() => {
+              const newStatus =
+                selectedStatus === 'Manutencao' || selectedStatus === 'manutencao'
+                  ? 'all'
+                  : 'Manutencao'
+              handleStatusChange(newStatus)
+            }}
+            title="Clique para filtrar apenas exemplares em manutenção"
+          >
             <CardContent className="p-3.5 flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-100">
                 <Wrench className="w-5 h-5" />
@@ -382,7 +429,7 @@ export default function Acervo() {
               />
             </div>
 
-            <div className="w-full sm:w-56">
+            <div className="w-full sm:w-48">
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                 <SelectTrigger className="text-xs">
                   <div className="flex items-center gap-1.5 text-slate-700">
@@ -401,14 +448,87 @@ export default function Acervo() {
               </Select>
             </div>
 
-            <Button
-              type="submit"
-              variant="default"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-5"
-            >
-              Pesquisar
-            </Button>
+            <div className="w-full sm:w-48">
+              <Select value={selectedStatus} onValueChange={handleStatusChange}>
+                <SelectTrigger className="text-xs">
+                  <div className="flex items-center gap-1.5 text-slate-700">
+                    <Wrench className="w-3.5 h-3.5 text-rose-600" />
+                    <SelectValue placeholder="Todos os Status" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Status</SelectItem>
+                  <SelectItem value="Manutencao">Em Manutenção</SelectItem>
+                  <SelectItem value="Disponivel">Disponíveis</SelectItem>
+                  <SelectItem value="Emprestado">Emprestados</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="submit"
+                variant="default"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-5"
+              >
+                Pesquisar
+              </Button>
+
+              {(searchQuery || selectedCategory !== 'all' || selectedStatus !== 'all') && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleClearFilters}
+                  className="text-xs text-slate-500 hover:text-slate-900"
+                >
+                  Limpar
+                </Button>
+              )}
+            </div>
           </form>
+
+          {/* Active filter tags/pills */}
+          {(selectedStatus !== 'all' || selectedCategory !== 'all' || searchQuery) && (
+            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-100 text-xs">
+              <span className="text-slate-500 font-medium text-[11px]">Filtros ativos:</span>
+              {selectedStatus !== 'all' && (
+                <Badge
+                  variant="outline"
+                  className="bg-rose-50 text-rose-700 border-rose-200 gap-1 font-medium cursor-pointer"
+                  onClick={() => handleStatusChange('all')}
+                >
+                  <Wrench className="w-3 h-3" />
+                  {selectedStatus === 'Manutencao' || selectedStatus === 'manutencao'
+                    ? 'Status: Em Manutenção'
+                    : `Status: ${selectedStatus}`}
+                  <span className="ml-1 text-rose-400 font-bold hover:text-rose-900">×</span>
+                </Badge>
+              )}
+              {selectedCategory !== 'all' && (
+                <Badge
+                  variant="outline"
+                  className="bg-slate-100 text-slate-700 border-slate-200 gap-1 font-medium cursor-pointer"
+                  onClick={() => setSelectedCategory('all')}
+                >
+                  Categoria: {selectedCategory}
+                  <span className="ml-1 text-slate-400 font-bold hover:text-slate-900">×</span>
+                </Badge>
+              )}
+              {searchQuery && (
+                <Badge
+                  variant="outline"
+                  className="bg-slate-100 text-slate-700 border-slate-200 gap-1 font-medium cursor-pointer"
+                  onClick={() => {
+                    setSearchQuery('')
+                    updateFiltersUrl('', undefined, undefined)
+                  }}
+                >
+                  Busca: "{searchQuery}"
+                  <span className="ml-1 text-slate-400 font-bold hover:text-slate-900">×</span>
+                </Badge>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

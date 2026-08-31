@@ -38,7 +38,7 @@ export interface TotaisAcervo {
 }
 
 export const TitulosService = {
-  async getAll(searchQuery?: string, category?: string, onlyActive = true) {
+  async getAll(searchQuery?: string, category?: string, onlyActive = true, statusFilter?: string) {
     let query = supabase
       .from('titulo')
       .select('*, exemplar(id_exemplar, seq, status, localizacao)')
@@ -62,7 +62,7 @@ export const TitulosService = {
     const { data, error } = await query
     if (error) throw error
 
-    const formatted: TituloWithStats[] = (data || []).map((item: any) => {
+    let formatted: TituloWithStats[] = (data || []).map((item: any) => {
       const exemplares = item.exemplar || []
       const total = exemplares.length
       const disponiveis = exemplares.filter((e: any) => e.status === 'Disponivel').length
@@ -104,6 +104,20 @@ export const TitulosService = {
         autor_formatado: autorFormatado,
       }
     })
+
+    if (statusFilter && statusFilter !== 'all') {
+      if (
+        statusFilter === 'manutencao' ||
+        statusFilter === 'Manutencao' ||
+        statusFilter === 'EM_MANUTENCAO'
+      ) {
+        formatted = formatted.filter((t) => t.exemplares_manutencao > 0)
+      } else if (statusFilter === 'disponivel' || statusFilter === 'Disponivel') {
+        formatted = formatted.filter((t) => t.exemplares_disponiveis > 0)
+      } else if (statusFilter === 'emprestado' || statusFilter === 'Emprestado') {
+        formatted = formatted.filter((t) => t.exemplares_emprestados > 0)
+      }
+    }
 
     return formatted
   },

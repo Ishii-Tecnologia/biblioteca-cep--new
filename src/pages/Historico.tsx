@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { HistoricoService, HistoricoDetailed, MovimentacaoReportItem } from '@/services/historico'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
@@ -29,6 +30,8 @@ import {
   Square,
   BarChart2,
   Bookmark,
+  Wrench,
+  RotateCcw,
 } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -64,19 +67,22 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function Historico() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialTipoParam = searchParams.get('tipo') || 'todos'
+
   const { profile } = useAuth()
   const { toast } = useToast()
 
   // Tab state
   const [activeTab, setActiveTab] = useState<
     'logs' | 'leitores' | 'titulos' | 'usuarios' | 'movimentacoes'
-  >('logs')
+  >((searchParams.get('tab') as any) || 'logs')
 
   // --- ABA 1: LOGS / HISTÓRICO GERAL ---
   const [logs, setLogs] = useState<HistoricoDetailed[]>([])
   const [loadingLogs, setLoadingLogs] = useState(true)
   const [searchLogs, setSearchLogs] = useState('')
-  const [tipoFiltroLogs, setTipoFiltroLogs] = useState<string>('todos')
+  const [tipoFiltroLogs, setTipoFiltroLogs] = useState<string>(initialTipoParam)
   const [dataInicioLogs, setDataInicioLogs] = useState('')
   const [dataFimLogs, setDataFimLogs] = useState('')
 
@@ -275,14 +281,27 @@ export default function Historico() {
   // Check admin
   const isAdmin = profile?.role === 'admin'
 
+  // Sincronizar query params
+  useEffect(() => {
+    const tipo = searchParams.get('tipo')
+    if (tipo && tipo !== tipoFiltroLogs) {
+      setTipoFiltroLogs(tipo)
+    }
+    const tab = searchParams.get('tab')
+    if (tab && tab !== activeTab) {
+      setActiveTab(tab as any)
+    }
+  }, [searchParams])
+
   // Load logs
-  const fetchLogs = async (customInicio?: string, customFim?: string) => {
+  const fetchLogs = async (customTipo?: string, customInicio?: string, customFim?: string) => {
     // Quando o tipo estiver marcado como "Todos os tipos" (ou "todos"), listar todos os registros da tabela (sem filtro de tipo)
     try {
       setLoadingLogs(true)
+      const currentTipo = customTipo !== undefined ? customTipo : tipoFiltroLogs
       const data = await HistoricoService.getAll(
         0,
-        tipoFiltroLogs === 'todos' ? undefined : tipoFiltroLogs,
+        currentTipo === 'todos' ? undefined : currentTipo,
         (customInicio !== undefined ? customInicio : dataInicioLogs).trim() || undefined,
         (customFim !== undefined ? customFim : dataFimLogs).trim() || undefined,
       )
@@ -309,7 +328,25 @@ export default function Historico() {
       })
       return
     }
-    fetchLogs(dataInicioLogs, dataFimLogs)
+    fetchLogs(undefined, dataInicioLogs, dataFimLogs)
+  }
+
+  const handleTipoLogsChange = (newTipo: string) => {
+    setTipoFiltroLogs(newTipo)
+    if (newTipo !== 'todos') {
+      setSearchParams({ tipo: newTipo })
+    } else {
+      setSearchParams({})
+    }
+  }
+
+  const handleResetLogsFilter = () => {
+    setTipoFiltroLogs('todos')
+    setSearchLogs('')
+    setDataInicioLogs('')
+    setDataFimLogs('')
+    setSearchParams({})
+    fetchLogs('todos', '', '')
   }
 
   // Load leitores
@@ -1784,64 +1821,165 @@ export default function Historico() {
                 </div>
               </div>
 
-              {/* Filtros da aba de logs */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar nos logs..."
-                    value={searchLogs}
-                    onChange={(e) => setSearchLogs(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
+              {/* Atalhos Rápidos & Filtros da aba de logs */}
+              <div className="space-y-3 pt-4">
+                {/* Barra de Atalhos Rápidos */}
+                <div className="flex flex-wrap items-center gap-2 p-2 bg-slate-50 dark:bg-muted/40 rounded-lg border border-slate-200 dark:border-border text-xs">
+                  <span className="font-semibold text-slate-600 dark:text-muted-foreground flex items-center gap-1.5 pl-1">
+                    <History className="w-3.5 h-3.5 text-primary" />
+                    Atalhos Rápidos:
+                  </span>
 
-                <Select value={tipoFiltroLogs} onValueChange={setTipoFiltroLogs}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tipo de Operação" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos os tipos de operações</SelectItem>
-                    <SelectItem value="Empréstimo">Empréstimos</SelectItem>
-                    <SelectItem value="Devolução">Devoluções</SelectItem>
-                    <SelectItem value="Renovação">Renovações</SelectItem>
-                    <SelectItem value="Reserva Criada">Reserva Criada</SelectItem>
-                    <SelectItem value="Reserva Cancelada">Reserva Cancelada</SelectItem>
-                    <SelectItem value="Reserva Atendida">Reserva Atendida</SelectItem>
-                    <SelectItem value="Entrada em Manutenção">Entrada em Manutenção</SelectItem>
-                    <SelectItem value="Saída de Manutenção">Saída de Manutenção</SelectItem>
-                    <SelectItem value="Baixa / Perdido">Baixa / Perdido</SelectItem>
-                    <SelectItem value="Importação CSV Acervo">Importação CSV Acervo</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-medium shrink-0">De:</span>
-                  <DatePickerBR
-                    value={dataInicioLogs}
-                    onChange={setDataInicioLogs}
-                    placeholder="dd/mm/aaaa"
-                    className="flex-1"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-medium shrink-0">Até:</span>
-                  <DatePickerBR
-                    value={dataFimLogs}
-                    onChange={setDataFimLogs}
-                    placeholder="dd/mm/aaaa"
-                    className="flex-1"
-                  />
                   <Button
+                    type="button"
                     size="sm"
-                    variant="secondary"
-                    onClick={handleFilterLogs}
-                    className="h-9 px-3 shrink-0"
+                    variant={tipoFiltroLogs === 'todos' ? 'default' : 'outline'}
+                    onClick={() => handleTipoLogsChange('todos')}
+                    className="h-7 text-xs px-2.5"
                   >
-                    Filtrar
+                    Todos os Registros
                   </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={
+                      tipoFiltroLogs === 'manutencao_todas' ||
+                      tipoFiltroLogs === 'Entrada em Manutenção' ||
+                      tipoFiltroLogs === 'Saída de Manutenção'
+                        ? 'destructive'
+                        : 'outline'
+                    }
+                    onClick={() => handleTipoLogsChange('manutencao_todas')}
+                    className={`h-7 text-xs px-2.5 gap-1.5 font-medium ${
+                      tipoFiltroLogs === 'manutencao_todas'
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-xs'
+                        : 'border-rose-300 text-rose-700 hover:bg-rose-50 hover:text-rose-800'
+                    }`}
+                  >
+                    <Wrench className="w-3.5 h-3.5" />
+                    Entradas / Saídas de Manutenção
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={tipoFiltroLogs === 'Empréstimo' ? 'default' : 'outline'}
+                    onClick={() => handleTipoLogsChange('Empréstimo')}
+                    className="h-7 text-xs px-2.5"
+                  >
+                    Empréstimos
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={tipoFiltroLogs === 'Devolução' ? 'default' : 'outline'}
+                    onClick={() => handleTipoLogsChange('Devolução')}
+                    className="h-7 text-xs px-2.5"
+                  >
+                    Devoluções
+                  </Button>
+
+                  {(tipoFiltroLogs !== 'todos' || searchLogs || dataInicioLogs || dataFimLogs) && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={handleResetLogsFilter}
+                      className="h-7 text-xs px-2 ml-auto text-slate-600 hover:text-slate-900 gap-1"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Voltar à visão completa
+                    </Button>
+                  )}
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar nos logs..."
+                      value={searchLogs}
+                      onChange={(e) => setSearchLogs(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+
+                  <Select value={tipoFiltroLogs} onValueChange={handleTipoLogsChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tipo de Operação" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos os tipos de operações</SelectItem>
+                      <SelectItem value="manutencao_todas" className="font-semibold text-rose-700">
+                        🔧 Todas as Manutenções (Entradas e Saídas)
+                      </SelectItem>
+                      <SelectItem value="Entrada em Manutenção">Entrada em Manutenção</SelectItem>
+                      <SelectItem value="Saída de Manutenção">Saída de Manutenção</SelectItem>
+                      <SelectItem value="Empréstimo">Empréstimos</SelectItem>
+                      <SelectItem value="Devolução">Devoluções</SelectItem>
+                      <SelectItem value="Renovação">Renovações</SelectItem>
+                      <SelectItem value="Reserva Criada">Reserva Criada</SelectItem>
+                      <SelectItem value="Reserva Cancelada">Reserva Cancelada</SelectItem>
+                      <SelectItem value="Reserva Atendida">Reserva Atendida</SelectItem>
+                      <SelectItem value="Baixa / Perdido">Baixa / Perdido</SelectItem>
+                      <SelectItem value="Importação CSV Acervo">Importação CSV Acervo</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground font-medium shrink-0">De:</span>
+                    <DatePickerBR
+                      value={dataInicioLogs}
+                      onChange={setDataInicioLogs}
+                      placeholder="dd/mm/aaaa"
+                      className="flex-1"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground font-medium shrink-0">Até:</span>
+                    <DatePickerBR
+                      value={dataFimLogs}
+                      onChange={setDataFimLogs}
+                      placeholder="dd/mm/aaaa"
+                      className="flex-1"
+                    />
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={handleFilterLogs}
+                      className="h-9 px-3 shrink-0"
+                    >
+                      Filtrar
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Banner de status / filtro ativo se filtrando por manutenção */}
+                {(tipoFiltroLogs === 'manutencao_todas' ||
+                  tipoFiltroLogs === 'Entrada em Manutenção' ||
+                  tipoFiltroLogs === 'Saída de Manutenção') && (
+                  <div className="p-2.5 px-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-between text-xs text-rose-900">
+                    <div className="flex items-center gap-2 font-medium">
+                      <Wrench className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>
+                        Exibindo apenas registros de <strong>Manutenção de Exemplares</strong>{' '}
+                        (Entradas e Saídas).
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleResetLogsFilter}
+                      className="h-6 text-xs text-rose-800 hover:text-rose-900 hover:bg-rose-100 font-semibold"
+                    >
+                      Ver todos os registros
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardHeader>
 
