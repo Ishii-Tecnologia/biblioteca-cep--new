@@ -82,13 +82,15 @@ const DEFAULT_PARAMS = {
   label_estrutura_espirito_medium: {
     defaultValue: 'Espírito + Médium',
     label: 'Rótulo da Estrutura: Espírito + Médium',
-    description: 'Nome personalizado exibido no seletor de autoria para livros psicografados / mediúnicos.',
+    description:
+      'Nome personalizado exibido no seletor de autoria para livros psicografados / mediúnicos.',
     type: 'text' as const,
   },
   label_estrutura_convencional: {
     defaultValue: 'Autor Convencional',
     label: 'Rótulo da Estrutura: Autor Convencional',
-    description: 'Nome personalizado exibido no seletor de autoria para autores encarnados / literatura geral.',
+    description:
+      'Nome personalizado exibido no seletor de autoria para autores encarnados / literatura geral.',
     type: 'text' as const,
   },
 }
@@ -453,7 +455,8 @@ export default function Configuracoes() {
             Configurações do Sistema
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Gerencie os parâmetros operacionais, prazos, estruturas de autoria, modelo CSV e rotinas da biblioteca.
+            Gerencie os parâmetros operacionais, prazos, estruturas de autoria, modelo CSV e rotinas
+            da biblioteca.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -519,14 +522,18 @@ export default function Configuracoes() {
                 Estruturas & Rótulos de Autoria
               </CardTitle>
               <CardDescription className="text-xs">
-                Personalize os títulos e rótulos exibidos nos formulários de cadastro de livros e seletores de autoria.
+                Personalize os títulos e rótulos exibidos nos formulários de cadastro de livros e
+                seletores de autoria.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="label_espirito_medium" className="text-xs font-semibold text-slate-700">
+                    <Label
+                      htmlFor="label_espirito_medium"
+                      className="text-xs font-semibold text-slate-700"
+                    >
                       {DEFAULT_PARAMS.label_estrutura_espirito_medium.label}
                     </Label>
                     <span className="text-[11px] text-slate-400 font-mono">
@@ -549,7 +556,10 @@ export default function Configuracoes() {
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="label_convencional" className="text-xs font-semibold text-slate-700">
+                    <Label
+                      htmlFor="label_convencional"
+                      className="text-xs font-semibold text-slate-700"
+                    >
                       {DEFAULT_PARAMS.label_estrutura_convencional.label}
                     </Label>
                     <span className="text-[11px] text-slate-400 font-mono">
@@ -581,7 +591,8 @@ export default function Configuracoes() {
                 Template CSV para Cadastro de Livros
               </CardTitle>
               <CardDescription className="text-xs">
-                Baixe o modelo oficial em formato CSV com cabeçalhos pré-formatados e exemplos prontos para preenchimento.
+                Baixe o modelo oficial em formato CSV com cabeçalhos pré-formatados e exemplos
+                prontos para preenchimento.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -591,7 +602,11 @@ export default function Configuracoes() {
                     Arquivo Modelo de Importação (template_cadastro_livros_cep.csv)
                   </p>
                   <p className="text-[11px] text-slate-500 leading-relaxed max-w-xl">
-                    Contém as colunas: <code className="bg-slate-200/80 px-1 py-0.5 rounded text-[10px] font-mono">isbn;titulo;autor_espiritual;autor_mediunico;autor;editora;ano_publicacao;categoria;sinopse;exemplares;localizacao</code> com codificação UTF-8 pronta para Excel.
+                    Contém as colunas:{' '}
+                    <code className="bg-slate-200/80 px-1 py-0.5 rounded text-[10px] font-mono">
+                      isbn;titulo;autor_espiritual;autor_mediunico;autor;editora;ano_publicacao;categoria;sinopse;exemplares;localizacao
+                    </code>{' '}
+                    com codificação UTF-8 pronta para Excel.
                   </p>
                 </div>
                 <Button

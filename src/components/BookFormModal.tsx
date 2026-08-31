@@ -63,7 +63,9 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
   const [autorEspiritual, setAutorEspiritual] = useState('')
   const [autorMediunico, setAutorMediunico] = useState('')
   const [autor, setAutor] = useState('')
-  const [authorStructure, setAuthorStructure] = useState<'ESPIRITO_MEDIUM' | 'CONVENCIONAL'>('ESPIRITO_MEDIUM')
+  const [authorStructure, setAuthorStructure] = useState<'ESPIRITO_MEDIUM' | 'CONVENCIONAL'>(
+    'ESPIRITO_MEDIUM',
+  )
   const [editora, setEditora] = useState('')
   const [anoPublicacao, setAnoPublicacao] = useState<number | ''>('')
   const [categoria, setCategoria] = useState('')
@@ -252,7 +254,12 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
           }
         }
         const text = e.clipboardData.getData('text')
-        if (text && (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('data:image/'))) {
+        if (
+          text &&
+          (text.startsWith('http://') ||
+            text.startsWith('https://') ||
+            text.startsWith('data:image/'))
+        ) {
           setCapaUrl(text.trim())
           toast({
             title: 'URL da capa colada',
@@ -276,7 +283,12 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
         }
         if (navigator.clipboard && navigator.clipboard.readText) {
           const text = await navigator.clipboard.readText()
-          if (text && (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('data:image/'))) {
+          if (
+            text &&
+            (text.startsWith('http://') ||
+              text.startsWith('https://') ||
+              text.startsWith('data:image/'))
+          ) {
             setCapaUrl(text.trim())
             toast({
               title: 'URL da capa colada',
@@ -553,7 +565,8 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                   </div>
 
                   <p className="text-[11px] text-slate-500">
-                    Você pode colar a imagem diretamente com <strong>Ctrl+V</strong>, colar uma URL ou fazer upload de um arquivo.
+                    Você pode colar a imagem diretamente com <strong>Ctrl+V</strong>, colar uma URL
+                    ou fazer upload de um arquivo.
                   </p>
 
                   <div className="flex flex-col sm:flex-row gap-2">
@@ -686,18 +699,24 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
             <div className="p-3.5 rounded-xl border border-border bg-card space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <Label htmlFor="author-structure-select" className="text-xs font-semibold text-slate-900">
+                  <Label
+                    htmlFor="author-structure-select"
+                    className="text-xs font-semibold text-slate-900"
+                  >
                     Estrutura de Autoria
                   </Label>
                   <p className="text-[11px] text-muted-foreground">
-                    Selecione o formato de autoria da obra para preenchimento dos campos correspondentes.
+                    Selecione o formato de autoria da obra para preenchimento dos campos
+                    correspondentes.
                   </p>
                 </div>
 
                 <div className="w-full sm:w-56">
                   <Select
                     value={authorStructure}
-                    onValueChange={(val: 'ESPIRITO_MEDIUM' | 'CONVENCIONAL') => setAuthorStructure(val)}
+                    onValueChange={(val: 'ESPIRITO_MEDIUM' | 'CONVENCIONAL') =>
+                      setAuthorStructure(val)
+                    }
                   >
                     <SelectTrigger
                       id="author-structure-select"
@@ -726,7 +745,10 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                           <span>{labelEspiritoMedium} (Padrão)</span>
                         </div>
                       </SelectItem>
-                      <SelectItem value="CONVENCIONAL" className="text-xs font-medium text-slate-700">
+                      <SelectItem
+                        value="CONVENCIONAL"
+                        className="text-xs font-medium text-slate-700"
+                      >
                         <div className="flex items-center gap-1.5">
                           <User className="w-3.5 h-3.5 text-slate-500" />
                           <span>{labelConvencional}</span>
@@ -918,7 +940,11 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
               <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={loading} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
+              <Button
+                type="submit"
+                disabled={loading}
+                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                 {isEditing ? 'Salvar Alterações' : 'Cadastrar Livro'}
               </Button>
