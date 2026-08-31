@@ -112,10 +112,11 @@ export const ExemplaresService = {
 
     if (error) throw error
 
-    // F-03: Registrar evento de manutenção no Histórico Geral
+    // F-03: Registrar evento de manutenção no Histórico Geral com observação dedicada
     try {
       const bookTitle = (currentEx?.titulo as any)?.titulo_de_livro || id_exemplar
-      const obsText = observacao?.trim() ? ` — Motivo: ${observacao.trim()}` : ''
+      const obsClean = observacao?.trim() || null
+      const obsText = obsClean ? ` — Motivo: ${obsClean}` : ''
 
       if (finalStatus === 'Manutencao') {
         await HistoricoService.log(
@@ -125,6 +126,8 @@ export const ExemplaresService = {
           `Exemplar ${id_exemplar} ("${bookTitle}") enviado para manutenção física${obsText}`,
           operatorName,
           'exemplar',
+          null,
+          obsClean,
         )
       } else if (currentEx?.status === 'Manutencao' && finalStatus === 'Disponivel') {
         await HistoricoService.log(
@@ -134,6 +137,8 @@ export const ExemplaresService = {
           `Exemplar ${id_exemplar} ("${bookTitle}") liberado da manutenção para disponibilidade${obsText}`,
           operatorName,
           'exemplar',
+          null,
+          obsClean,
         )
       } else if (finalStatus === 'Perdido') {
         await HistoricoService.log(
@@ -143,6 +148,8 @@ export const ExemplaresService = {
           `Exemplar ${id_exemplar} ("${bookTitle}") baixado do acervo como perdido/danificado${obsText}`,
           operatorName,
           'exemplar',
+          null,
+          obsClean,
         )
       }
     } catch (logErr) {

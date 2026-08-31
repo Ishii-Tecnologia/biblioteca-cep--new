@@ -135,6 +135,7 @@ export default function Historico() {
     leitor: true,
     operador: true,
     detalhes: true,
+    observacao: true,
   }
 
   const [colsLogs, setColsLogs] = useState(() => {
@@ -456,6 +457,7 @@ export default function Historico() {
     const q = searchLogs.toLowerCase()
     return (
       (l.detalhes && l.detalhes.toLowerCase().includes(q)) ||
+      (l.observacao && l.observacao.toLowerCase().includes(q)) ||
       (l.tipo_operacao && l.tipo_operacao.toLowerCase().includes(q)) ||
       (l.id_exemplar && l.id_exemplar.toLowerCase().includes(q)) ||
       (l.leitor?.nome_do_leitor && l.leitor.nome_do_leitor.toLowerCase().includes(q)) ||
@@ -790,6 +792,7 @@ export default function Historico() {
     if (colsLogs.leitor) ths.push('<th>Leitor</th>')
     if (colsLogs.operador) ths.push('<th>Operador</th>')
     if (colsLogs.detalhes) ths.push('<th>Detalhes</th>')
+    if (colsLogs.observacao) ths.push('<th>Observação</th>')
 
     const rowsHtml = filteredLogs
       .map((l) => {
@@ -822,6 +825,11 @@ export default function Historico() {
         if (colsLogs.detalhes) {
           tds.push(
             `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; color: #475569;">${l.detalhes || '-'}</td>`,
+          )
+        }
+        if (colsLogs.observacao) {
+          tds.push(
+            `<td style="padding: 6px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; color: #b91c1c; font-style: italic;">${l.observacao || '-'}</td>`,
           )
         }
         return `<tr>${tds.join('')}</tr>`
@@ -1198,6 +1206,7 @@ export default function Historico() {
       Leitor: l.leitor?.nome_do_leitor || (l.id_leitor ? `#${String(l.id_leitor)}` : '-'),
       Operador: l.usuario_sistema || 'Sistema',
       Detalhes: l.detalhes || '-',
+      Observação: l.observacao || '-',
     }))
     exportCSV(exportData, 'relatorio_logs')
   }
@@ -1790,6 +1799,15 @@ export default function Historico() {
                             />
                             <span>Detalhes</span>
                           </label>
+                          <label className="flex items-center gap-2 text-xs cursor-pointer hover:text-foreground">
+                            <Checkbox
+                              checked={colsLogs.observacao}
+                              onCheckedChange={(v) =>
+                                setColsLogs((prev) => ({ ...prev, observacao: !!v }))
+                              }
+                            />
+                            <span>Observação</span>
+                          </label>
                         </div>
                       </div>
                     </PopoverContent>
@@ -2023,6 +2041,12 @@ export default function Historico() {
                           )}
                         </div>
                         <p className="text-sm text-muted-foreground">{log.detalhes || '-'}</p>
+                        {log.observacao && (
+                          <div className="flex items-start gap-1.5 text-xs text-rose-700 dark:text-rose-400 bg-rose-50/80 dark:bg-rose-950/30 p-2 rounded border border-rose-200/60 dark:border-rose-900/50 mt-1">
+                            <span className="font-semibold shrink-0">Observação / Motivo:</span>
+                            <span className="italic">{log.observacao}</span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex flex-row md:flex-col items-start md:items-end justify-between border-t md:border-t-0 pt-2 md:pt-0 border-border/40 gap-1 text-xs">

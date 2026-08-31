@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TitulosService, Titulo, TituloInsert, TituloWithStats } from '@/services/titulos'
+import { CategoriasService } from '@/services/categorias'
 import { fetchBookByIsbn, normalizeAndValidateIsbn, formatAuthorDisplay } from '@/services/isbn'
 import { AuthorCombobox } from '@/components/AuthorCombobox'
 import { BarcodeScannerModal } from '@/components/BarcodeScannerModal'
@@ -44,7 +45,7 @@ interface BookFormModalProps {
   onClose: () => void
   onSuccess: () => void
   bookToEdit?: TituloWithStats | Titulo | null
-  categories: string[]
+  categories?: string[]
 }
 
 export const BookFormModal: React.FC<BookFormModalProps> = ({
@@ -52,7 +53,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
   onClose,
   onSuccess,
   bookToEdit,
-  categories,
+  categories: initialCategories,
 }) => {
   const { toast } = useToast()
   const isEditing = !!bookToEdit
@@ -74,6 +75,10 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
   const [vol, setVol] = useState<number | ''>('')
   const [ativo, setAtivo] = useState(true)
 
+  // Lista dinâmica de categorias carregada do banco
+  const [availableCategories, setAvailableCategories] = useState<string[]>(initialCategories || [])
+  const [loadingCategories, setLoadingCategories] = useState(false)
+
   // Creation extra fields
   const [numExemplares, setNumExemplares] = useState(1)
   const [localizacao, setLocalizacao] = useState('Estante Geral')
@@ -90,7 +95,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
 
   const coverPasteBoxRef = useRef<HTMLDivElement>(null)
 
-  // Carregar rótulos customizados das configurações
+  // Carregar categorias dinamicamente da tabela `categorias` (e fallback) e rótulos
   useEffect(() => {
     if (isOpen) {
       ParametrosService.getByName('label_estrutura_espirito_medium', 'Espírito + Médium')
@@ -99,8 +104,32 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       ParametrosService.getByName('label_estrutura_convencional', 'Autor Convencional')
         .then(setLabelConvencional)
         .catch(() => setLabelConvencional('Autor Convencional'))
+
+      setLoadingCategories(true)
+      CategoriasService.getAll()
+        .then((cats) => {
+          const names = cats.map((c) => c.nome.trim()).filter(Boolean)
+          if (names.length > 0) {
+            setAvailableCategories(names)
+          } else if (initialCategories && initialCategories.length > 0) {
+            setAvailableCategories(initialCategories)
+          } else {
+            TitulosService.getCategories().then((tCats) => {
+              setAvailableCategories(tCats.length > 0 ? tCats : [])
+            })
+          }
+        })
+        .catch((err) => {
+          console.error('Erro ao buscar categorias no modal:', err)
+          if (initialCategories && initialCategories.length > 0) {
+            setAvailableCategories(initialCategories)
+          }
+        })
+        .finally(() => {
+          setLoadingCategories(false)
+        })
     }
-  }, [isOpen])
+  }, [isOpen, initialCategories])
 
   // Preenche formulário ao editar ou abrir
   useEffect(() => {
@@ -131,7 +160,8 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       setAuthorStructure('ESPIRITO_MEDIUM')
       setEditora('')
       setAnoPublicacao('')
-      setCategoria(categories[0] || 'Geral')
+      const defaultCat = availableCategories.length > 0 ? availableCategories[0] : ''
+      setCategoria(defaultCat)
       setSinopse('')
       setCapaUrl('')
       setVol('')
@@ -140,7 +170,14 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       setLocalizacao('Estante Geral')
     }
     setIsbnError(null)
-  }, [bookToEdit, categories, isOpen])
+  }, [bookToEdit, isOpen])
+
+  // Se for novo cadastro e categoria estiver vazia quando as categorias carregarem, define a primeira categoria cadastrada
+  useEffect(() => {
+    if (!bookToEdit && isOpen && !categoria && availableCategories.length > 0) {
+      setCategoria(availableCategories[0])
+    }
+  }, [availableCategories, bookToEdit, isOpen, categoria])
 
   // Validação dinâmica do campo ISBN
   const handleIsbnChange = (val: string) => {
@@ -821,18 +858,33 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
             {/* 5. LINHA: CATEGORIA, EDITORA, ANO */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Categoria</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">Categoria</Label>
+                  {loadingCategories && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="w-2.5 h-2.5 animate-spin" /> Carregando...
+                    </span>
+                  )}
+                </div>
                 <Select value={categoria} onValueChange={setCategoria}>
-                  <SelectTrigger className="text-sm">
-                    <SelectValue placeholder="Selecione" />
+                  <SelectTrigger className="text-sm bg-white">
+                    <SelectValue placeholder="Selecione a categoria" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((c) => (
-                      <SelectItem key={c} value={c}>
-                        {c}
-                      </SelectItem>
-                    ))}
-                    {!categories.includes('Geral') && <SelectItem value="Geral">Geral</SelectItem>}
+                  <SelectContent className="max-h-60">
+                    {availableCategories.length === 0 ? (
+                      <SelectItem value="Geral">Geral</SelectItem>
+                    ) : (
+                      <>
+                        {availableCategories.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                        {categoria && !availableCategories.includes(categoria) && (
+                          <SelectItem value={categoria}>{categoria}</SelectItem>
+                        )}
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

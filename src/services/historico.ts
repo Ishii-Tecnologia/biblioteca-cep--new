@@ -20,6 +20,7 @@ export interface HistoricoDetailed {
   id_leitor?: number | null
   usuario_sistema?: string | null
   detalhes?: string | null
+  observacao?: string | null
   exemplar?: {
     id_exemplar: string
     titulo?: {
@@ -181,6 +182,7 @@ export const HistoricoService = {
         id_leitor: item.id_leitor,
         usuario_sistema: operadorName,
         detalhes: item.descricao,
+        observacao: item.observacao || null,
         leitor: leitorInfo,
         exemplar: exemplarInfo,
       }
@@ -278,6 +280,7 @@ export const HistoricoService = {
     usuario_sistema = 'Sistema',
     entidade_tipo = 'exemplar',
     explicitUserId?: string | null,
+    observacao?: string | null,
   ) {
     let finalDescricao = detalhes
     if (!finalDescricao) {
@@ -309,6 +312,7 @@ export const HistoricoService = {
         entidade_id: id_exemplar || '',
         id_leitor: id_leitor || null,
         usuario_id: resolvedUserId,
+        observacao: observacao?.trim() || null,
       })
       .select()
 
