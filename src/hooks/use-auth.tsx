@@ -320,6 +320,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email: email.trim(),
       password,
     })
+    if (!error && data?.user) {
+      setUser(data.user)
+      setSession(data.session)
+      await fetchProfile(data.user)
+    }
     return { data, error }
   }
 

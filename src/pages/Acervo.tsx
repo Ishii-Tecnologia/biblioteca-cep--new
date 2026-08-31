@@ -820,7 +820,15 @@ export default function Acervo() {
         open={deleteConfirmOpen}
         onOpenChange={setDeleteConfirmOpen}
         title="Remover Livro do Acervo"
-        description={`Deseja realmente remover a obra "${bookToDelete?.title}" (${bookToDelete?.id_titulo}) do acervo? Esta ação não pode ser desfeita.`}
+        description={
+          <div className="space-y-1.5">
+            <p>Deseja realmente remover a obra:</p>
+            <p className="text-rose-600 font-semibold break-words">
+              "{bookToDelete?.title}" ({bookToDelete?.id_titulo})
+            </p>
+            <p className="text-slate-500">Esta ação não pode ser desfeita.</p>
+          </div>
+        }
         confirmLabel="Sim, Remover Livro"
         variant="destructive"
         loading={deleteLoading}

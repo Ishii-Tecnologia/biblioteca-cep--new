@@ -10,7 +10,7 @@ import { Library, LogIn, UserPlus, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 export default function Login() {
-  const { signIn, signUp, user } = useAuth()
+  const { signIn, signUp, user, profile } = useAuth()
   const { toast } = useToast()
   const navigate = useNavigate()
   const location = useLocation()
@@ -47,7 +47,7 @@ export default function Login() {
     }
     setLoading(true)
     try {
-      const { error } = await signIn(email, password)
+      const { data, error } = await signIn(email, password)
       if (error) {
         toast({
           title: 'Falha no login',
@@ -55,7 +55,34 @@ export default function Login() {
           variant: 'destructive',
         })
       } else {
-        toast({ title: 'Bem-vindo!', description: 'Login realizado com sucesso.' })
+        const loggedUser = data?.user || user
+        let displayName =
+          profile?.full_name ||
+          loggedUser?.user_metadata?.full_name ||
+          loggedUser?.user_metadata?.nome ||
+          loggedUser?.email?.split('@')[0] ||
+          ''
+
+        // Fallback rápido se ainda não veio no profile/user_metadata
+        if (!displayName && loggedUser?.id) {
+          try {
+            const { data: pRow } = await (
+              await import('@/lib/supabase/client')
+            ).supabase
+              .from('profiles')
+              .select('nome, full_name')
+              .eq('id', loggedUser.id)
+              .maybeSingle()
+            if (pRow?.nome || pRow?.full_name) {
+              displayName = pRow.nome || pRow.full_name
+            }
+          } catch {
+            // fallback silencioso
+          }
+        }
+
+        const welcomeTitle = displayName ? `Bem-vindo, ${displayName}!` : 'Bem-vindo!'
+        toast({ title: welcomeTitle, description: 'Login realizado com sucesso.' })
         navigate(from, { replace: true })
       }
     } finally {
