@@ -2,272 +2,361 @@ import React, { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { TitulosService, Titulo } from '@/services/titulos'
-import { CategoriasService, Categoria } from '@/services/categorias'
-import { useToast } from '@/hooks/use-toast'
+import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { TitulosService, Titulo, TituloInsert, TituloWithStats } from '@/services/titulos'
+import { fetchBookByIsbn, normalizeAndValidateIsbn, formatAuthorDisplay } from '@/services/isbn'
+import { AuthorCombobox } from '@/components/AuthorCombobox'
+import { BarcodeScannerModal } from '@/components/BarcodeScannerModal'
+import {
+  Upload,
   Sparkles,
   Loader2,
-  BookPlus,
-  RefreshCw,
-  Upload,
-  Image as ImageIcon,
-  X,
-  ClipboardPaste,
-  Barcode,
+  Camera,
+  AlertCircle,
+  HelpCircle,
+  CheckCircle2,
+  BookOpen,
 } from 'lucide-react'
+import { useToast } from '@/hooks/use-toast'
 import { uploadImageToStorage } from '@/lib/image-upload'
-import { BarcodeScannerModal } from '@/components/BarcodeScannerModal'
 import { BookMetadata } from '@/services/isbn'
 
 interface BookFormModalProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  bookToEdit?: Titulo | null
+  isOpen: boolean
+  onClose: () => void
   onSuccess: () => void
+  bookToEdit?: TituloWithStats | Titulo | null
+  categories: string[]
 }
 
-export function BookFormModal({ open, onOpenChange, bookToEdit, onSuccess }: BookFormModalProps) {
+export const BookFormModal: React.FC<BookFormModalProps> = ({
+  isOpen,
+  onClose,
+  onSuccess,
+  bookToEdit,
+  categories,
+}) => {
   const { toast } = useToast()
+  const isEditing = !!bookToEdit
+
+  const [idTitulo, setIdTitulo] = useState('')
+  const [isbn, setIsbn] = useState('')
+  const [tituloDeLivro, setTituloDeLivro] = useState('')
+  const [autorEspiritual, setAutorEspiritual] = useState('')
+  const [autorMediunico, setAutorMediunico] = useState('')
+  const [autor, setAutor] = useState('')
+  const [isMediumistic, setIsMediumistic] = useState(false)
+  const [editora, setEditora] = useState('')
+  const [anoPublicacao, setAnoPublicacao] = useState<number | ''>('')
+  const [categoria, setCategoria] = useState('')
+  const [sinopse, setSinopse] = useState('')
+  const [capaUrl, setCapaUrl] = useState('')
+  const [vol, setVol] = useState<number | ''>('')
+  const [ativo, setAtivo] = useState(true)
+
+  // Creation extra fields
+  const [numExemplares, setNumExemplares] = useState(1)
+  const [localizacao, setLocalizacao] = useState('Estante Geral')
+
   const [loading, setLoading] = useState(false)
-  const [generatingId, setGeneratingId] = useState(false)
-  const [coverFile, setCoverFile] = useState<File | null>(null)
-  const [coverPreview, setCoverPreview] = useState<string | null>(null)
-  const [categoriesList, setCategoriesList] = useState<Categoria[]>([])
-  const [barcodeModalOpen, setBarcodeModalOpen] = useState(false)
+  const [loadingIsbn, setLoadingIsbn] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [isbnError, setIsbnError] = useState<string | null>(null)
+  const [isScannerOpen, setIsScannerOpen] = useState(false)
 
-  useEffect(() => {
-    if (open) {
-      CategoriasService.getAll()
-        .then((cats) => setCategoriesList(cats))
-        .catch(() => {})
-    }
-  }, [open])
-
-  const [formData, setFormData] = useState({
-    id_titulo: '',
-    titulo_de_livro: '',
-    autor: '',
-    editora: '',
-    ano_publicacao: new Date().getFullYear(),
-    isbn: '',
-    categoria: 'Geral',
-    sinopse: '',
-    vol: 0,
-    capa_url: '',
-    exemplaresIniciais: 1,
-    localizacao: 'Estante Geral',
-  })
-
+  // Preenche formulário ao editar ou abrir
   useEffect(() => {
     if (bookToEdit) {
-      setFormData({
-        id_titulo: bookToEdit.id_titulo,
-        titulo_de_livro: bookToEdit.titulo_de_livro,
-        autor: bookToEdit.autor,
-        editora: bookToEdit.editora || '',
-        ano_publicacao: bookToEdit.ano_publicacao || new Date().getFullYear(),
-        isbn: bookToEdit.isbn || '',
-        categoria: bookToEdit.categoria || 'Geral',
-        sinopse: bookToEdit.sinopse || '',
-        vol: bookToEdit.vol || 0,
-        capa_url: bookToEdit.capa_url || '',
-        exemplaresIniciais: 0,
-        localizacao: '',
-      })
-      setCoverPreview(bookToEdit.capa_url || null)
-      setCoverFile(null)
+      setIdTitulo(bookToEdit.id_titulo)
+      setIsbn(bookToEdit.isbn || '')
+      setTituloDeLivro(bookToEdit.titulo_de_livro)
+      setAutorEspiritual(bookToEdit.autor_espiritual || '')
+      setAutorMediunico(bookToEdit.autor_mediunico || '')
+      setAutor(bookToEdit.autor || '')
+      setIsMediumistic(!!(bookToEdit.autor_espiritual || bookToEdit.autor_mediunico))
+      setEditora(bookToEdit.editora || '')
+      setAnoPublicacao(bookToEdit.ano_publicacao || '')
+      setCategoria(bookToEdit.categoria || '')
+      setSinopse(bookToEdit.sinopse || '')
+      setCapaUrl(bookToEdit.capa_url || '')
+      setVol(bookToEdit.vol ?? '')
+      setAtivo(bookToEdit.ativo ?? true)
     } else {
-      setFormData({
-        id_titulo: '',
-        titulo_de_livro: '',
-        autor: '',
-        editora: '',
-        ano_publicacao: new Date().getFullYear(),
-        isbn: '',
-        categoria: 'Literatura Brasileira',
-        sinopse: '',
-        vol: 0,
-        capa_url: '',
-        exemplaresIniciais: 1,
-        localizacao: 'Estante A-1',
-      })
-      setCoverPreview(null)
-      setCoverFile(null)
+      setIdTitulo('')
+      setIsbn('')
+      setTituloDeLivro('')
+      setAutorEspiritual('')
+      setAutorMediunico('')
+      setAutor('')
+      setIsMediumistic(false)
+      setEditora('')
+      setAnoPublicacao('')
+      setCategoria(categories[0] || 'Geral')
+      setSinopse('')
+      setCapaUrl('')
+      setVol('')
+      setAtivo(true)
+      setNumExemplares(1)
+      setLocalizacao('Estante Geral')
     }
-  }, [bookToEdit, open])
+    setIsbnError(null)
+  }, [bookToEdit, categories, isOpen])
 
-  const handleCoverSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setCoverFile(file)
-      const reader = new FileReader()
-      reader.onload = (ev) => {
-        setCoverPreview(ev.target?.result as string)
-      }
-      reader.readAsDataURL(file)
+  // Validação dinâmica do campo ISBN
+  const handleIsbnChange = (val: string) => {
+    setIsbn(val)
+    if (!val.trim()) {
+      setIsbnError(isEditing ? null : 'ISBN é obrigatório para novos cadastros.')
+      return
     }
-  }
-
-  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
-    const items = e.clipboardData?.items
-    if (!items) return
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i]
-      if (item.type.startsWith('image/')) {
-        const blob = item.getAsFile()
-        if (blob) {
-          e.preventDefault()
-          const pastedFile = new File([blob], `pasted-image-${Date.now()}.png`, {
-            type: blob.type,
-          })
-          setCoverFile(pastedFile)
-          const reader = new FileReader()
-          reader.onload = (ev) => {
-            setCoverPreview(ev.target?.result as string)
-          }
-          reader.readAsDataURL(pastedFile)
-          toast({
-            title: 'Imagem colada!',
-            description: 'Capa do livro colada com sucesso da área de transferência.',
-          })
-          break
-        }
-      }
+    const validation = normalizeAndValidateIsbn(val)
+    if (!validation.valid) {
+      setIsbnError(validation.error || 'Formato de ISBN inválido.')
+    } else {
+      setIsbnError(null)
     }
   }
 
-  const handleRemoveCover = () => {
-    setCoverFile(null)
-    setCoverPreview(null)
-    setFormData((prev) => ({ ...prev, capa_url: '' }))
-  }
-
-  const handleGenerateCode = async () => {
-    if (!formData.autor.trim()) {
+  // Preenchimento automático via Google Books / Open Library
+  const handleFetchIsbn = async (customIsbn?: string) => {
+    const targetIsbn = customIsbn || isbn
+    if (!targetIsbn || !targetIsbn.trim()) {
       toast({
-        title: 'Informe o autor',
-        description: 'Digite o nome do autor para gerar o código padronizado (Ex: MC-001).',
+        title: 'ISBN em branco',
+        description: 'Digite ou escaneie um ISBN para consultar.',
         variant: 'destructive',
       })
       return
     }
-    setGeneratingId(true)
+
+    const val = normalizeAndValidateIsbn(targetIsbn)
+    if (!val.valid) {
+      toast({
+        title: 'ISBN Inválido',
+        description: val.error,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setLoadingIsbn(true)
+    setIsbnError(null)
     try {
-      const code = await TitulosService.generateId(formData.autor, formData.titulo_de_livro)
-      setFormData((prev) => ({ ...prev, id_titulo: code }))
-    } catch (e: any) {
-      toast({ title: 'Erro ao gerar código', description: e.message, variant: 'destructive' })
+      const meta = await fetchBookByIsbn(val.isbn13)
+      setIsbn(meta.isbn)
+      if (meta.titulo_de_livro) setTituloDeLivro(meta.titulo_de_livro)
+      if (meta.autor) {
+        setAutor(meta.autor)
+        if (!isMediumistic) {
+          setAutorEspiritual('')
+          setAutorMediunico('')
+        }
+      }
+      if (meta.editora) setEditora(meta.editora)
+      if (meta.ano_publicacao) setAnoPublicacao(meta.ano_publicacao)
+      if (meta.sinopse) setSinopse(meta.sinopse)
+      if (meta.capa_url && !capaUrl) setCapaUrl(meta.capa_url)
+      if (meta.categoria && !categoria) setCategoria(meta.categoria)
+
+      toast({
+        title: 'Dados encontrados!',
+        description: `Metadados preenchidos para "${meta.titulo_de_livro}".`,
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Aviso',
+        description: err.message || 'Não foram encontrados dados automáticos para este ISBN.',
+        variant: 'destructive',
+      })
     } finally {
-      setGeneratingId(false)
+      setLoadingIsbn(false)
     }
   }
 
-  const handleBookFoundByBarcode = async (book: BookMetadata) => {
-    // Fill formData with fetched book info
-    setFormData((prev) => ({
-      ...prev,
-      titulo_de_livro: book.titulo_de_livro || prev.titulo_de_livro,
-      autor: book.autor || prev.autor,
-      editora: book.editora || prev.editora,
-      ano_publicacao: book.ano_publicacao || prev.ano_publicacao,
-      isbn: book.isbn || prev.isbn,
-      categoria: book.categoria || prev.categoria || 'Geral',
-      sinopse: book.sinopse || prev.sinopse,
-      capa_url: book.capa_url || prev.capa_url,
-    }))
+  // Upload manual de imagem da capa
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
 
-    if (book.capa_url) {
-      setCoverPreview(book.capa_url)
-      setCoverFile(null)
+    setUploadingImage(true)
+    try {
+      const publicUrl = await uploadImageToStorage(file, 'capas')
+      setCapaUrl(publicUrl)
+      toast({
+        title: 'Capa enviada',
+        description: 'A imagem da capa foi atualizada com sucesso.',
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Erro no upload',
+        description: err.message || 'Não foi possível carregar a imagem.',
+        variant: 'destructive',
+      })
+    } finally {
+      setUploadingImage(false)
     }
+  }
 
-    // Automatically generate code if author is found and id_titulo is empty
-    if (book.autor && !formData.id_titulo && !bookToEdit) {
-      try {
-        const generatedCode = await TitulosService.generateId(
-          book.autor,
-          book.titulo_de_livro || '',
-        )
-        setFormData((prev) => ({ ...prev, id_titulo: generatedCode }))
-      } catch {
-        /* intentionally ignored */
-      }
+  const handleScanSuccess = (meta: BookMetadata) => {
+    if (meta.isbn) {
+      setIsbn(meta.isbn)
+      handleIsbnChange(meta.isbn)
     }
+    if (meta.titulo_de_livro) setTituloDeLivro(meta.titulo_de_livro)
+    if (meta.autor) {
+      setAutor(meta.autor)
+    }
+    if (meta.editora) setEditora(meta.editora)
+    if (meta.ano_publicacao) setAnoPublicacao(meta.ano_publicacao)
+    if (meta.sinopse) setSinopse(meta.sinopse)
+    if (meta.capa_url && !capaUrl) setCapaUrl(meta.capa_url)
+    if (meta.categoria && !categoria) setCategoria(meta.categoria)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!formData.titulo_de_livro.trim() || !formData.autor.trim()) {
+
+    // Validação de Título
+    if (!tituloDeLivro.trim()) {
       toast({
-        title: 'Campos obrigatórios',
-        description: 'Título e Autor são obrigatórios.',
+        title: 'Campo obrigatório',
+        description: 'Informe o título da obra.',
         variant: 'destructive',
       })
       return
     }
 
+    // Validação de Autoria (F-04 e F-06)
+    if (isMediumistic) {
+      if (!autorEspiritual.trim() && !autorMediunico.trim()) {
+        toast({
+          title: 'Autoria incompleta',
+          description: 'Informe ao menos o Autor Espiritual ou o Médium.',
+          variant: 'destructive',
+        })
+        return
+      }
+    } else {
+      if (!autor.trim()) {
+        toast({
+          title: 'Autor obrigatório',
+          description: 'Informe o nome do autor da obra.',
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+
+    // F-09: ISBN Obrigatório para NOVOS cadastros (Decisão de Produto)
+    if (!isEditing && !isbn.trim()) {
+      setIsbnError('O ISBN é obrigatório para novos cadastros.')
+      toast({
+        title: 'ISBN Obrigatório',
+        description: 'O campo ISBN é obrigatório para novos cadastros no acervo.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Se ISBN foi preenchido, validar rigorosamente
+    if (isbn.trim()) {
+      const val = normalizeAndValidateIsbn(isbn)
+      if (!val.valid) {
+        setIsbnError(val.error || 'ISBN inválido.')
+        toast({
+          title: 'ISBN Inválido',
+          description: val.error,
+          variant: 'destructive',
+        })
+        return
+      }
+    }
+
     setLoading(true)
+
     try {
-      let finalCapaUrl = formData.capa_url.trim() || null
+      const finalAutorEspiritual = isMediumistic ? autorEspiritual.trim() : null
+      const finalAutorMediunico = isMediumistic ? autorMediunico.trim() : null
+      const finalAutorGeral = !isMediumistic ? autor.trim() : ''
 
-      if (coverFile) {
-        finalCapaUrl = await uploadImageToStorage(coverFile, 'capas', {
-          maxWidth: 800,
-          maxHeight: 1200,
-          quality: 0.8,
-          outputFormat: 'image/jpeg',
-        })
-      }
+      const finalUnifiedAuthor = formatAuthorDisplay(
+        finalAutorEspiritual,
+        finalAutorMediunico,
+        finalAutorGeral,
+      )
 
-      if (bookToEdit) {
+      const normalizedIsbnValue = isbn.trim()
+        ? normalizeAndValidateIsbn(isbn).isbn13
+        : isEditing
+          ? bookToEdit?.isbn || null
+          : null
+
+      if (isEditing && bookToEdit) {
         await TitulosService.update(bookToEdit.id_titulo, {
-          titulo_de_livro: formData.titulo_de_livro,
-          autor: formData.autor,
-          editora: formData.editora || null,
-          ano_publicacao: formData.ano_publicacao ? Number(formData.ano_publicacao) : null,
-          isbn: formData.isbn || null,
-          categoria: formData.categoria || null,
-          sinopse: formData.sinopse?.trim() || null,
-          vol: Number(formData.vol) || 0,
-          capa_url: finalCapaUrl,
+          titulo_de_livro: tituloDeLivro.trim(),
+          autor: finalUnifiedAuthor,
+          autor_espiritual: finalAutorEspiritual,
+          autor_mediunico: finalAutorMediunico,
+          editora: editora.trim() || null,
+          ano_publicacao: anoPublicacao === '' ? null : Number(anoPublicacao),
+          categoria: categoria || 'Geral',
+          sinopse: sinopse.trim() || null,
+          capa_url: capaUrl.trim() || null,
+          vol: vol === '' ? 0 : Number(vol),
+          ativo: ativo,
+          isbn: normalizedIsbnValue,
         })
-        toast({ title: 'Sucesso', description: 'Livro atualizado com sucesso!' })
+
+        toast({
+          title: 'Obra atualizada',
+          description: `"${tituloDeLivro}" foi atualizado com sucesso.`,
+        })
       } else {
-        await TitulosService.create(
-          {
-            id_titulo: formData.id_titulo || undefined,
-            titulo_de_livro: formData.titulo_de_livro,
-            autor: formData.autor,
-            editora: formData.editora || null,
-            ano_publicacao: formData.ano_publicacao ? Number(formData.ano_publicacao) : null,
-            isbn: formData.isbn || null,
-            categoria: formData.categoria || null,
-            sinopse: formData.sinopse?.trim() || null,
-            vol: Number(formData.vol) || 0,
-            capa_url: finalCapaUrl,
-          },
-          formData.exemplaresIniciais,
-          formData.localizacao,
-        )
-        toast({ title: 'Sucesso', description: 'Novo livro cadastrado com sucesso!' })
+        const payload: TituloInsert = {
+          id_titulo: idTitulo.trim().toUpperCase(),
+          titulo_de_livro: tituloDeLivro.trim(),
+          autor: finalUnifiedAuthor,
+          autor_espiritual: finalAutorEspiritual,
+          autor_mediunico: finalAutorMediunico,
+          editora: editora.trim() || null,
+          ano_publicacao: anoPublicacao === '' ? null : Number(anoPublicacao),
+          categoria: categoria || 'Geral',
+          sinopse: sinopse.trim() || null,
+          capa_url: capaUrl.trim() || null,
+          vol: vol === '' ? 0 : Number(vol),
+          ativo: ativo,
+          isbn: normalizedIsbnValue,
+        }
+
+        await TitulosService.create(payload, numExemplares, localizacao)
+
+        toast({
+          title: 'Obra cadastrada',
+          description: `"${tituloDeLivro}" foi adicionado com ${numExemplares} exemplar(es).`,
+        })
       }
+
       onSuccess()
-      onOpenChange(false)
+      onClose()
     } catch (err: any) {
       toast({
-        title: 'Erro ao salvar livro',
-        description: err.message || 'Ocorreu um erro ao processar a requisição.',
+        title: 'Erro ao salvar obra',
+        description: err.message || 'Ocorreu um erro ao salvar o registro no banco.',
         variant: 'destructive',
       })
     } finally {
@@ -276,340 +365,342 @@ export function BookFormModal({ open, onOpenChange, bookToEdit, onSuccess }: Boo
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[620px] max-h-[90vh] overflow-y-auto">
-        <form onSubmit={handleSubmit}>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-slate-900">
-              <BookPlus className="w-5 h-5 text-emerald-600" />
-              {bookToEdit ? 'Editar Obra do Acervo' : 'Cadastrar Novo Livro'}
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-primary" />
+              {isEditing ? 'Editar Livro no Acervo' : 'Novo Livro no Acervo'}
             </DialogTitle>
-            <DialogDescription>
-              {bookToEdit
-                ? 'Atualize os dados bibliográficos deste título.'
-                : 'Insira os dados do livro e a quantidade inicial de cópias físicas (exemplares).'}
-            </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
-            {/* Botão de Leitura de Código de Barras / ISBN */}
-            {!bookToEdit && (
-              <div className="flex items-center justify-between p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2 bg-emerald-600 text-white rounded-md">
-                    <Barcode className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-emerald-950">
-                      Preenchimento Automático por Código de Barras
-                    </p>
-                    <p className="text-[11px] text-emerald-800">
-                      Aponte a câmera para o ISBN no verso do livro para importar os dados.
-                    </p>
-                  </div>
+          <form onSubmit={handleSubmit} className="space-y-4 pt-2">
+            {/* ISBN com busca automática e leitor de código de barras */}
+            <div className="space-y-1.5 p-3.5 bg-muted/30 rounded-xl border border-border">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="isbn" className="font-semibold text-xs flex items-center gap-1.5">
+                  ISBN (10 ou 13 dígitos)
+                  <span className="text-rose-500 font-bold">*</span>
+                </Label>
+                <span className="text-[11px] text-muted-foreground">
+                  Obrigatório para novos cadastros
+                </span>
+              </div>
+
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    id="isbn"
+                    value={isbn}
+                    onChange={(e) => handleIsbnChange(e.target.value)}
+                    placeholder="Ex: 9788573286885 ou 8573286889"
+                    className={`text-sm font-mono ${isbnError ? 'border-rose-500 ring-1 ring-rose-500' : ''}`}
+                  />
+                  {isbn && !isbnError && (
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                  )}
                 </div>
+
                 <Button
                   type="button"
+                  variant="outline"
                   size="sm"
-                  onClick={() => setBarcodeModalOpen(true)}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-1.5 shadow-xs"
+                  onClick={() => setIsScannerOpen(true)}
+                  title="Escanear com a câmera ou leitor"
+                  className="px-2.5 shrink-0"
                 >
-                  <Barcode className="w-3.5 h-3.5" />
-                  Ler Código de Barras
+                  <Camera className="w-4 h-4" />
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleFetchIsbn()}
+                  disabled={loadingIsbn || !isbn.trim()}
+                  className="gap-1.5 shrink-0"
+                >
+                  {loadingIsbn ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                  )}
+                  {loadingIsbn ? 'Consultando...' : 'Preencher'}
                 </Button>
               </div>
-            )}
 
-            {/* Upload de Capa */}
-            <div
-              onPaste={handlePaste}
-              tabIndex={0}
-              className="flex flex-col sm:flex-row items-center gap-4 p-3 bg-slate-50 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all cursor-default"
-              title="Clique aqui e pressione Ctrl+V / Cmd+V para colar uma imagem da área de transferência"
-            >
-              <div className="w-20 h-28 bg-slate-200 rounded border border-slate-300 overflow-hidden flex items-center justify-center shrink-0 shadow-xs">
-                {coverPreview ? (
-                  <img
-                    src={coverPreview}
-                    alt="Capa do livro"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center text-slate-400 p-2 text-center">
-                    <ImageIcon className="w-6 h-6 mb-1" />
-                    <span className="text-[10px] leading-tight font-medium">Sem capa</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1.5 flex-1 text-center sm:text-left">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-semibold text-slate-800">
-                    Imagem da Capa do Livro
-                  </Label>
-                  <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-slate-400">
-                    <ClipboardPaste className="w-3 h-3" /> Ctrl+V aceito
-                  </span>
+              {isbnError && (
+                <div className="flex items-center gap-1 text-xs text-rose-600 dark:text-rose-400 mt-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>{isbnError}</span>
                 </div>
-                <p className="text-[11px] text-slate-500">
-                  Selecione um arquivo ou cole (Ctrl+V) diretamente aqui. Comprimida via Canvas e
-                  salva no Storage.
-                </p>
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
-                  <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 shadow-xs">
-                    <Upload className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Upload de Imagem</span>
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp,image/jpg"
-                      onChange={handleCoverSelect}
-                      className="hidden"
-                      disabled={loading}
-                    />
-                  </label>
-                  {coverPreview && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleRemoveCover}
-                      className="h-8 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2"
-                    >
-                      <X className="w-3.5 h-3.5 mr-1" />
-                      Remover Capa
-                    </Button>
-                  )}
-                </div>
-              </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2">
-                <Label htmlFor="titulo_de_livro" className="text-xs font-semibold text-slate-700">
-                  Título do Livro *
-                </Label>
-                <Input
-                  id="titulo_de_livro"
-                  required
-                  placeholder="Ex: Dom Casmurro"
-                  value={formData.titulo_de_livro}
-                  onChange={(e) => setFormData({ ...formData, titulo_de_livro: e.target.value })}
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label
-                  htmlFor="id_titulo"
-                  className="text-xs font-semibold text-slate-700 flex items-center justify-between"
-                >
-                  <span>Código (ID)</span>
-                  {!bookToEdit && (
-                    <button
-                      type="button"
-                      onClick={handleGenerateCode}
-                      disabled={generatingId}
-                      className="text-[11px] text-emerald-600 hover:text-emerald-700 flex items-center gap-0.5 font-medium"
-                    >
-                      {generatingId ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-3 h-3" />
-                      )}
-                      Auto
-                    </button>
-                  )}
-                </Label>
-                <Input
-                  id="id_titulo"
-                  disabled={!!bookToEdit}
-                  placeholder="Ex: MC-001"
-                  value={formData.id_titulo}
-                  onChange={(e) =>
-                    setFormData({ ...formData, id_titulo: e.target.value.toUpperCase() })
-                  }
-                  className="mt-1 font-mono uppercase"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="autor" className="text-xs font-semibold text-slate-700">
-                  Autor(a) *
-                </Label>
-                <Input
-                  id="autor"
-                  required
-                  placeholder="Ex: Machado de Assis"
-                  value={formData.autor}
-                  onChange={(e) => setFormData({ ...formData, autor: e.target.value })}
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="editora" className="text-xs font-semibold text-slate-700">
-                  Editora
-                </Label>
-                <Input
-                  id="editora"
-                  placeholder="Ex: Companhia das Letras"
-                  value={formData.editora}
-                  onChange={(e) => setFormData({ ...formData, editora: e.target.value })}
-                  className="mt-1"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <Label htmlFor="categoria" className="text-xs font-semibold text-slate-700">
-                  Categoria / Gênero
-                </Label>
-                <Input
-                  id="categoria"
-                  list="categorias-datalist"
-                  placeholder="Ex: Doutrina Espírita, Mediunidade"
-                  value={formData.categoria}
-                  onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
-                  className="mt-1"
-                />
-                <datalist id="categorias-datalist">
-                  {categoriesList.map((cat) => (
-                    <option key={cat.id} value={cat.nome} />
-                  ))}
-                </datalist>
-              </div>
-
-              <div>
-                <Label htmlFor="ano_publicacao" className="text-xs font-semibold text-slate-700">
-                  Ano de Publicação
-                </Label>
-                <Input
-                  id="ano_publicacao"
-                  type="number"
-                  placeholder="Ex: 2020"
-                  value={formData.ano_publicacao || ''}
-                  onChange={(e) =>
-                    setFormData({ ...formData, ano_publicacao: Number(e.target.value) })
-                  }
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="vol" className="text-xs font-semibold text-slate-700">
-                  Volume / Edição
-                </Label>
-                <Input
-                  id="vol"
-                  type="number"
-                  min={0}
-                  placeholder="0 se único"
-                  value={formData.vol || ''}
-                  onChange={(e) => setFormData({ ...formData, vol: Number(e.target.value) })}
-                  className="mt-1"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="isbn" className="text-xs font-semibold text-slate-700">
-                ISBN (opcional)
+            {/* Título da Obra */}
+            <div className="space-y-1.5">
+              <Label htmlFor="titulo" className="text-xs font-semibold">
+                Título da Obra <span className="text-rose-500">*</span>
               </Label>
               <Input
-                id="isbn"
-                placeholder="Ex: 978-85-359-0277-8"
-                value={formData.isbn}
-                onChange={(e) => setFormData({ ...formData, isbn: e.target.value })}
-                className="mt-1 font-mono text-xs"
+                id="titulo"
+                value={tituloDeLivro}
+                onChange={(e) => setTituloDeLivro(e.target.value)}
+                placeholder="Ex: Nosso Lar, O Evangelho Segundo o Espiritismo..."
+                className="text-sm font-medium"
+                required
               />
             </div>
 
-            <div>
-              <Label htmlFor="sinopse" className="text-xs font-semibold text-slate-700">
-                Sinopse
-              </Label>
-              <Textarea
-                id="sinopse"
-                rows={3}
-                placeholder="Resumo ou descrição do enredo da obra..."
-                value={formData.sinopse}
-                onChange={(e) => setFormData({ ...formData, sinopse: e.target.value })}
-                className="mt-1 resize-none text-xs"
-              />
+            {/* Separador de Autoria Espírita / Convencional (F-04 e F-06) */}
+            <div className="p-3.5 rounded-xl border border-border bg-card space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-xs font-semibold">Estrutura de Autoria</Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Ative caso a obra possua autor espiritual (espírito) psicografado por médium
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">
+                    {isMediumistic ? 'Espírito + Médium' : 'Autor Convencional'}
+                  </span>
+                  <Switch
+                    checked={isMediumistic}
+                    onCheckedChange={(checked) => setIsMediumistic(checked)}
+                  />
+                </div>
+              </div>
+
+              {isMediumistic ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-500" />
+                      Autor Espiritual (Espírito)
+                    </Label>
+                    <AuthorCombobox
+                      value={autorEspiritual}
+                      onChange={(name) => setAutorEspiritual(name)}
+                      authorType="ESPIRITO"
+                      isSpirit={true}
+                      placeholder="Ex: André Luiz, Emmanuel, Joanna..."
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Médium / Psicografia</Label>
+                    <AuthorCombobox
+                      value={autorMediunico}
+                      onChange={(name) => setAutorMediunico(name)}
+                      authorType="MEDIUM"
+                      placeholder="Ex: Chico Xavier, Divaldo Franco..."
+                    />
+                  </div>
+
+                  {(autorEspiritual || autorMediunico) && (
+                    <div className="col-span-full text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
+                      Exibição formatada:{' '}
+                      <strong className="text-foreground">
+                        {formatAuthorDisplay(autorEspiritual, autorMediunico)}
+                      </strong>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1.5 pt-1">
+                  <Label className="text-xs font-medium">
+                    Autor(es) da Obra <span className="text-rose-500">*</span>
+                  </Label>
+                  <AuthorCombobox
+                    value={autor}
+                    onChange={(name) => setAutor(name)}
+                    authorType="ENCARNADO"
+                    placeholder="Ex: Allan Kardec, Gabriel Delanne, Léon Denis..."
+                  />
+                </div>
+              )}
             </div>
 
-            {!bookToEdit && (
-              <div className="bg-emerald-50/60 p-3.5 rounded-lg border border-emerald-100 space-y-3">
-                <p className="text-xs font-semibold text-emerald-900 flex items-center gap-1.5">
-                  <RefreshCw className="w-3.5 h-3.5 text-emerald-600" />
-                  Gerar Cópias Físicas Iniciais (Exemplares)
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <Label
-                      htmlFor="exemplaresIniciais"
-                      className="text-xs font-medium text-emerald-800"
-                    >
-                      Quantidade de Cópias
-                    </Label>
-                    <Input
-                      id="exemplaresIniciais"
-                      type="number"
-                      min={1}
-                      max={50}
-                      value={formData.exemplaresIniciais}
-                      onChange={(e) =>
-                        setFormData({ ...formData, exemplaresIniciais: Number(e.target.value) })
-                      }
-                      className="mt-1 bg-white"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="localizacao" className="text-xs font-medium text-emerald-800">
-                      Localização na Biblioteca
-                    </Label>
-                    <Input
-                      id="localizacao"
-                      placeholder="Ex: Estante B - Prateleira 2"
-                      value={formData.localizacao}
-                      onChange={(e) => setFormData({ ...formData, localizacao: e.target.value })}
-                      className="mt-1 bg-white"
-                    />
-                  </div>
+            {/* Linha: Categoria, Editora, Ano */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Categoria</Label>
+                <Select value={categoria} onValueChange={setCategoria}>
+                  <SelectTrigger className="text-sm">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                    {!categories.includes('Geral') && <SelectItem value="Geral">Geral</SelectItem>}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Editora</Label>
+                <Input
+                  value={editora}
+                  onChange={(e) => setEditora(e.target.value)}
+                  placeholder="Ex: FEB, IDE, EME..."
+                  className="text-sm"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Ano de Publicação</Label>
+                <Input
+                  type="number"
+                  value={anoPublicacao}
+                  onChange={(e) =>
+                    setAnoPublicacao(e.target.value === '' ? '' : parseInt(e.target.value, 10))
+                  }
+                  placeholder="Ex: 2021"
+                  className="text-sm"
+                  min={1800}
+                  max={2100}
+                />
+              </div>
+            </div>
+
+            {/* Linha: Volume e Código Interno (se edição) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Volume / Tomo (Opcional)</Label>
+                <Input
+                  type="number"
+                  value={vol}
+                  onChange={(e) =>
+                    setVol(e.target.value === '' ? '' : parseInt(e.target.value, 10))
+                  }
+                  placeholder="Ex: 1"
+                  className="text-sm"
+                  min={0}
+                />
+              </div>
+
+              {!isEditing ? (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Código do Livro (Opcional)</Label>
+                  <Input
+                    value={idTitulo}
+                    onChange={(e) => setIdTitulo(e.target.value.toUpperCase())}
+                    placeholder="Gerado automaticamente (ex: AL-104)"
+                    className="text-sm font-mono uppercase"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Código Interno</Label>
+                  <Input value={idTitulo} disabled className="text-sm font-mono bg-muted" />
+                </div>
+              )}
+            </div>
+
+            {/* Capa e Sinopse */}
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium flex items-center justify-between">
+                  <span>URL da Capa ou Foto</span>
+                  {capaUrl && (
+                    <span className="text-[11px] text-emerald-600 font-normal">
+                      ✓ Imagem vinculada
+                    </span>
+                  )}
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={capaUrl}
+                    onChange={(e) => setCapaUrl(e.target.value)}
+                    placeholder="https://... ou faça upload"
+                    className="text-sm flex-1 font-mono text-xs"
+                  />
+                  <Label
+                    htmlFor="cover-upload"
+                    className="cursor-pointer inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs border rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 shrink-0"
+                  >
+                    {uploadingImage ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Upload className="w-3.5 h-3.5" />
+                    )}
+                    Upload
+                  </Label>
+                  <input
+                    id="cover-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    disabled={uploadingImage}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Sinopse / Descrição</Label>
+                <Textarea
+                  value={sinopse}
+                  onChange={(e) => setSinopse(e.target.value)}
+                  placeholder="Breve resumo sobre os temas tratados na obra..."
+                  className="text-sm resize-none"
+                  rows={2}
+                />
+              </div>
+            </div>
+
+            {/* Exemplares iniciais (apenas na criação) */}
+            {!isEditing && (
+              <div className="p-3.5 bg-muted/40 rounded-xl border border-border grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">Quantidade Inicial de Exemplares</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={numExemplares}
+                    onChange={(e) => setNumExemplares(parseInt(e.target.value, 10) || 1)}
+                    className="text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold">Localização Física Padrão</Label>
+                  <Input
+                    value={localizacao}
+                    onChange={(e) => setLocalizacao(e.target.value)}
+                    placeholder="Ex: Estante 1, Gaveta A"
+                    className="text-sm"
+                  />
                 </div>
               </div>
             )}
-          </div>
 
-          <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={loading}
-            >
-              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {bookToEdit ? 'Salvar Alterações' : 'Cadastrar Livro'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
+            <DialogFooter className="pt-4 border-t gap-2">
+              <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={loading} className="gap-2">
+                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isEditing ? 'Salvar Alterações' : 'Cadastrar Livro'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <BarcodeScannerModal
-        open={barcodeModalOpen}
-        onOpenChange={setBarcodeModalOpen}
-        onBookFound={handleBookFoundByBarcode}
+        open={isScannerOpen}
+        onOpenChange={setIsScannerOpen}
+        onBookFound={handleScanSuccess}
       />
-    </Dialog>
+    </>
   )
 }

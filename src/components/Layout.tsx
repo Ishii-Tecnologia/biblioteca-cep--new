@@ -1,6 +1,7 @@
 import React from 'react'
 import { NavLink, Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
+import { useHeaderCounters } from '@/hooks/use-header-counters'
 import { getPrazoEmprestimoDias } from '@/services/parametros'
 import {
   BookOpen,
@@ -39,6 +40,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const { user, profile, isAdmin, isOperadorOrAdmin, signOut } = useAuth()
+  const { emprestimosAtivos, reservasAtivas } = useHeaderCounters()
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
   const [prazoDias, setPrazoDias] = React.useState<number>(15)
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false)
@@ -58,8 +60,22 @@ export default function Layout({ children }: LayoutProps) {
   const navItems = [
     { to: '/', label: 'Início', icon: LayoutDashboard, authRequired: false },
     { to: '/acervo', label: 'Livros', icon: BookOpen, authRequired: false },
-    { to: '/emprestimos', label: 'Empréstimos', icon: Repeat, authRequired: true },
-    { to: '/reservas', label: 'Reservas', icon: BookmarkCheck, authRequired: true },
+    {
+      to: '/emprestimos',
+      label: 'Empréstimos',
+      icon: Repeat,
+      authRequired: true,
+      badge: emprestimosAtivos > 0 ? `${emprestimosAtivos}` : undefined,
+      badgeVariant: 'default' as const,
+    },
+    {
+      to: '/reservas',
+      label: 'Reservas',
+      icon: BookmarkCheck,
+      authRequired: true,
+      badge: reservasAtivas > 0 ? `${reservasAtivas}` : undefined,
+      badgeVariant: 'warning' as const,
+    },
     {
       to: '/leitores',
       label: isOperadorOrAdmin ? 'Leitores' : 'Meus Dados',
@@ -110,7 +126,7 @@ export default function Layout({ children }: LayoutProps) {
                       variant="secondary"
                       className="text-[10px] font-medium bg-emerald-50 text-emerald-700 border-emerald-200"
                     >
-                      v2.0
+                      v3.0
                     </Badge>
                   </div>
                   <p className="text-[11px] text-slate-500 leading-none">
@@ -133,7 +149,7 @@ export default function Layout({ children }: LayoutProps) {
                     to={item.to}
                     end={item.to === '/'}
                     className={({ isActive }) =>
-                      `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative ${
                         isActive
                           ? 'bg-emerald-50 text-emerald-800 font-semibold'
                           : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -142,10 +158,48 @@ export default function Layout({ children }: LayoutProps) {
                   >
                     <Icon className="w-4 h-4" />
                     <span>{item.label}</span>
+                    {item.badge && (
+                      <span
+                        className={`ml-1 text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
+                          item.badgeVariant === 'warning'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        }`}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
                   </NavLink>
                 )
               })}
             </nav>
+
+            {/* Contadores nos cabeçalhos (F-02) */}
+            <div className="hidden lg:flex items-center gap-2 border-l border-slate-200 pl-4">
+              <Link
+                to="/emprestimos"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition-colors"
+                title="Empréstimos ativos na biblioteca"
+              >
+                <Repeat className="w-3.5 h-3.5 text-blue-600" />
+                <span>
+                  <strong className="text-slate-900 font-bold">{emprestimosAtivos}</strong>{' '}
+                  empréstimo(s) ativo(s)
+                </span>
+              </Link>
+
+              <Link
+                to="/reservas"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition-colors"
+                title="Reservas ativas pendentes"
+              >
+                <BookmarkCheck className="w-3.5 h-3.5 text-amber-600" />
+                <span>
+                  <strong className="text-slate-900 font-bold">{reservasAtivas}</strong> reserva(s)
+                  pendente(s)
+                </span>
+              </Link>
+            </div>
 
             {/* Right actions: User menu or login */}
             <div className="flex items-center gap-3">
@@ -190,7 +244,7 @@ export default function Layout({ children }: LayoutProps) {
                         <Shield className="w-3 h-3" />
                         Perfil:{' '}
                         <span className="font-semibold">
-                          {isAdmin ? 'Administrador' : 'Leitor'}
+                          {isAdmin ? 'Administrador' : isOperadorOrAdmin ? 'Operador' : 'Leitor'}
                         </span>
                       </div>
                     </DropdownMenuLabel>
@@ -204,13 +258,13 @@ export default function Layout({ children }: LayoutProps) {
                     <DropdownMenuItem asChild>
                       <Link to="/emprestimos" className="cursor-pointer">
                         <Repeat className="w-4 h-4 mr-2" />
-                        Empréstimos
+                        Empréstimos ({emprestimosAtivos})
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link to="/reservas" className="cursor-pointer">
                         <BookmarkCheck className="w-4 h-4 mr-2" />
-                        Reservas
+                        Reservas ({reservasAtivas})
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
@@ -303,6 +357,17 @@ export default function Layout({ children }: LayoutProps) {
         {/* Mobile Navigation Panel */}
         {mobileMenuOpen && (
           <div className="md:hidden border-t border-slate-200 bg-white px-4 pt-2 pb-4 space-y-1">
+            <div className="flex items-center gap-2 py-2 border-b border-slate-100 mb-2">
+              <Badge variant="outline" className="text-xs bg-slate-50 gap-1 text-slate-700">
+                <Repeat className="w-3 h-3 text-blue-600" />
+                {emprestimosAtivos} ativo(s)
+              </Badge>
+              <Badge variant="outline" className="text-xs bg-slate-50 gap-1 text-slate-700">
+                <BookmarkCheck className="w-3 h-3 text-amber-600" />
+                {reservasAtivas} reserva(s)
+              </Badge>
+            </div>
+
             {navItems.map((item) => {
               if (item.authRequired && !user) return null
               if (item.adminOnly && !isAdmin) return null
@@ -315,15 +380,22 @@ export default function Layout({ children }: LayoutProps) {
                   end={item.to === '/'}
                   onClick={() => setMobileMenuOpen(false)}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium ${
+                    `flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium ${
                       isActive
                         ? 'bg-emerald-50 text-emerald-800 font-semibold'
                         : 'text-slate-600 hover:bg-slate-50'
                     }`
                   }
                 >
-                  <Icon className="w-4 h-4" />
-                  <span>{item.label}</span>
+                  <div className="flex items-center gap-3">
+                    <Icon className="w-4 h-4" />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.badge && (
+                    <Badge variant="secondary" className="text-[10px]">
+                      {item.badge}
+                    </Badge>
+                  )}
                 </NavLink>
               )
             })}
@@ -350,7 +422,7 @@ export default function Layout({ children }: LayoutProps) {
             <span>•</span>
             <span>Prazo: {prazoDias} dias</span>
             <span>•</span>
-            <span>Versão 2.0</span>
+            <span>Versão 3.0</span>
           </div>
         </div>
       </footer>

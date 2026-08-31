@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/use-auth'
+import { useHeaderCounters } from '@/hooks/use-header-counters'
 import { EmprestimosService, EmprestimoDetailed } from '@/services/emprestimos'
 import { getPrazoRenovacaoDias } from '@/services/parametros'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,7 @@ import { formatDate } from '@/lib/utils'
 export default function Emprestimos() {
   const { isOperadorOrAdmin, profile } = useAuth()
   const { toast } = useToast()
+  const { refreshCounters } = useHeaderCounters()
 
   const [loans, setLoans] = useState<EmprestimoDetailed[]>([])
   const [loading, setLoading] = useState(true)
@@ -57,6 +59,7 @@ export default function Emprestimos() {
       ])
       setLoans(data)
       setPrazoRenovacaoDias(prazoRenovacao)
+      refreshCounters()
     } catch (err: any) {
       toast({
         title: 'Erro ao carregar empréstimos',
@@ -94,7 +97,8 @@ export default function Emprestimos() {
       })
       setReturnConfirmOpen(false)
       setLoanToReturn(null)
-      loadLoans()
+      await loadLoans()
+      refreshCounters()
     } catch (err: any) {
       toast({
         title: 'Erro ao registrar devolução',
@@ -131,7 +135,8 @@ export default function Emprestimos() {
       })
       setRenewConfirmOpen(false)
       setLoanToRenew(null)
-      loadLoans()
+      await loadLoans()
+      refreshCounters()
     } catch (err: any) {
       toast({
         title: 'Não foi possível renovar',

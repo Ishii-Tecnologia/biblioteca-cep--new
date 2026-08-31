@@ -1361,6 +1361,12 @@ export default function Historico() {
     if (t.includes('reserva')) {
       return <Badge className="bg-amber-100 text-amber-800 border-amber-200">{tipo}</Badge>
     }
+    if (t.includes('manutenção') || t.includes('manutencao')) {
+      return <Badge className="bg-rose-100 text-rose-800 border-rose-200">{tipo}</Badge>
+    }
+    if (t.includes('importação') || t.includes('importacao')) {
+      return <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200">{tipo}</Badge>
+    }
     return <Badge variant="outline">{tipo}</Badge>
   }
 
@@ -1795,13 +1801,17 @@ export default function Historico() {
                     <SelectValue placeholder="Tipo de Operação" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="todos">Todos os tipos</SelectItem>
+                    <SelectItem value="todos">Todos os tipos de operações</SelectItem>
                     <SelectItem value="Empréstimo">Empréstimos</SelectItem>
                     <SelectItem value="Devolução">Devoluções</SelectItem>
                     <SelectItem value="Renovação">Renovações</SelectItem>
                     <SelectItem value="Reserva Criada">Reserva Criada</SelectItem>
                     <SelectItem value="Reserva Cancelada">Reserva Cancelada</SelectItem>
                     <SelectItem value="Reserva Atendida">Reserva Atendida</SelectItem>
+                    <SelectItem value="Entrada em Manutenção">Entrada em Manutenção</SelectItem>
+                    <SelectItem value="Saída de Manutenção">Saída de Manutenção</SelectItem>
+                    <SelectItem value="Baixa / Perdido">Baixa / Perdido</SelectItem>
+                    <SelectItem value="Importação CSV Acervo">Importação CSV Acervo</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -2722,12 +2732,16 @@ export default function Historico() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos os tipos de registro</SelectItem>
-                  <SelectItem value="Empréstimo">Apenas Empréstimos</SelectItem>
-                  <SelectItem value="Devolução">Apenas Devoluções</SelectItem>
-                  <SelectItem value="Renovação">Apenas Renovações</SelectItem>
-                  <SelectItem value="Reserva">Apenas Reservas</SelectItem>
-                </SelectContent>
+                  <SelectItem value="todos">Todos os tipos</SelectItem>
+                  <SelectItem value="Empréstimo">Empréstimo</SelectItem>
+                  <SelectItem value="Devolução">Devolução</SelectItem>
+                  <SelectItem value="Renovação">Renovação</SelectItem>
+                  <SelectItem value="Reserva">Reserva</SelectItem>
+                  <SelectItem value="Entrada em Manutenção">Entrada em Manutenção</SelectItem>
+                  <SelectItem value="Saída de Manutenção">Saída de Manutenção</SelectItem>
+                  <SelectItem value="Baixa / Perdido">Baixa / Perdido</SelectItem>
+                  <SelectItem value="Importação CSV Acervo">Importação CSV Acervo</SelectItem>
+                </SelectContent>{' '}
               </Select>
             </div>
           </div>

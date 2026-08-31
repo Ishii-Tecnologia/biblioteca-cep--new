@@ -2,65 +2,65 @@ import React, { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { ExemplaresService, Exemplar } from '@/services/exemplares'
-import { Titulo } from '@/services/titulos'
-import { ConfirmModal } from '@/components/ConfirmModal'
-import { useAuth } from '@/hooks/use-auth'
+import { TituloWithStats } from '@/services/titulos'
+import { Plus, Trash2, Edit2, Check, X, Loader2, AlertTriangle, Wrench } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { Layers, Plus, Trash2, MapPin, Loader2, BookOpen } from 'lucide-react'
+import { useAuth } from '@/hooks/use-auth'
+import { useHeaderCounters } from '@/hooks/use-header-counters'
 
 interface CopiesModalProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  titulo: Titulo | null
-  onCopiesUpdated: () => void
-  onRequestLoan?: (exemplarId: string) => void
+  isOpen: boolean
+  onClose: () => void
+  book: TituloWithStats | null
+  onUpdate: () => void
 }
 
-export function CopiesModal({
-  open,
-  onOpenChange,
-  titulo,
-  onCopiesUpdated,
-  onRequestLoan,
-}: CopiesModalProps) {
-  const { isOperadorOrAdmin } = useAuth()
+export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book, onUpdate }) => {
   const { toast } = useToast()
-  const [exemplares, setExemplares] = useState<Exemplar[]>([])
+  const { user, profile } = useAuth()
+  const { refreshCounters } = useHeaderCounters()
+
+  const [copies, setCopies] = useState<Exemplar[]>([])
   const [loading, setLoading] = useState(false)
-  const [addingCopy, setAddingCopy] = useState(false)
+  const [adding, setAdding] = useState(false)
 
-  const [newLocation, setNewLocation] = useState('Estante Geral')
-  const [newQuantity, setNewQuantity] = useState(1)
+  // Add copies form
+  const [newCopiesQty, setNewCopiesQty] = useState(1)
+  const [newCopiesLocation, setNewCopiesLocation] = useState('Estante Geral')
 
-  // Confirm delete copy
-  const [deleteCopyConfirmOpen, setDeleteCopyConfirmOpen] = useState(false)
-  const [copyIdToDelete, setCopyIdToDelete] = useState<string | null>(null)
-  const [deleteCopyLoading, setDeleteCopyLoading] = useState(false)
-
-  useEffect(() => {
-    if (open && titulo) {
-      loadCopies()
-    }
-  }, [open, titulo])
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editStatus, setEditStatus] = useState<string>('')
+  const [editLocation, setEditLocation] = useState<string>('')
+  const [editObservacao, setEditObservacao] = useState<string>('')
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const loadCopies = async () => {
-    if (!titulo) return
+    if (!book) return
     setLoading(true)
     try {
-      const data = await ExemplaresService.getByTitulo(titulo.id_titulo)
-      setExemplares(data || [])
+      const data = await ExemplaresService.getByTitulo(book.id_titulo)
+      setCopies(data || [])
     } catch (err: any) {
       toast({
-        title: 'Erro ao listar exemplares',
+        title: 'Erro ao carregar exemplares',
         description: err.message,
         variant: 'destructive',
       })
@@ -69,62 +69,102 @@ export function CopiesModal({
     }
   }
 
+  useEffect(() => {
+    if (isOpen && book) {
+      loadCopies()
+      setEditingId(null)
+      setEditObservacao('')
+    }
+  }, [isOpen, book])
+
   const handleAddCopies = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!titulo) return
-    setAddingCopy(true)
+    if (!book) return
+
+    setAdding(true)
     try {
-      await ExemplaresService.create(titulo.id_titulo, newLocation, Number(newQuantity))
+      await ExemplaresService.create(book.id_titulo, newCopiesLocation, newCopiesQty)
       toast({
-        title: 'Cópias adicionadas',
-        description: `${newQuantity} novo(s) exemplar(es) cadastrado(s).`,
+        title: 'Exemplares adicionados',
+        description: `${newCopiesQty} novo(s) exemplar(es) criado(s).`,
       })
+      setNewCopiesQty(1)
       await loadCopies()
-      onCopiesUpdated()
-      setNewQuantity(1)
+      onUpdate()
+      refreshCounters()
     } catch (err: any) {
-      toast({ title: 'Erro ao criar exemplares', description: err.message, variant: 'destructive' })
+      toast({
+        title: 'Erro ao adicionar exemplares',
+        description: err.message,
+        variant: 'destructive',
+      })
     } finally {
-      setAddingCopy(false)
+      setAdding(false)
     }
   }
 
-  const handleStatusChange = async (id_exemplar: string, newStatus: string) => {
+  const handleStartEdit = (copy: Exemplar) => {
+    setEditingId(copy.id_exemplar)
+    setEditStatus(copy.status)
+    setEditLocation(copy.localizacao || '')
+    setEditObservacao('')
+  }
+
+  const handleCancelEdit = () => {
+    setEditingId(null)
+    setEditStatus('')
+    setEditLocation('')
+    setEditObservacao('')
+  }
+
+  const handleSaveEdit = async (copyId: string) => {
+    setSavingEdit(true)
     try {
-      await ExemplaresService.updateStatus(id_exemplar, newStatus)
+      const operatorName = profile?.full_name || user?.email || 'Operador'
+      await ExemplaresService.updateStatus(
+        copyId,
+        editStatus,
+        editLocation,
+        editObservacao,
+        operatorName,
+      )
       toast({
-        title: 'Status atualizado',
-        description: `Exemplar ${id_exemplar} definido como ${newStatus}.`,
+        title: 'Exemplar atualizado',
+        description: `Exemplar ${copyId} atualizado para status "${editStatus}".`,
       })
+      handleCancelEdit()
       await loadCopies()
-      onCopiesUpdated()
+      onUpdate()
+      refreshCounters()
     } catch (err: any) {
-      toast({ title: 'Erro ao alterar status', description: err.message, variant: 'destructive' })
+      toast({
+        title: 'Erro ao atualizar exemplar',
+        description: err.message,
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingEdit(false)
     }
   }
 
-  const handleDeleteCopy = (id_exemplar: string) => {
-    setCopyIdToDelete(id_exemplar)
-    setDeleteCopyConfirmOpen(true)
-  }
+  const handleDeleteCopy = async (copyId: string) => {
+    if (!confirm(`Deseja realmente remover o exemplar ${copyId}?`)) return
 
-  const executeDeleteCopy = async () => {
-    if (!copyIdToDelete) return
-    setDeleteCopyLoading(true)
     try {
-      await ExemplaresService.delete(copyIdToDelete)
+      await ExemplaresService.delete(copyId)
       toast({
         title: 'Exemplar removido',
-        description: `Exemplar ${copyIdToDelete} excluído com sucesso.`,
+        description: `O exemplar ${copyId} foi excluído.`,
       })
-      setDeleteCopyConfirmOpen(false)
-      setCopyIdToDelete(null)
       await loadCopies()
-      onCopiesUpdated()
+      onUpdate()
+      refreshCounters()
     } catch (err: any) {
-      toast({ title: 'Não foi possível remover', description: err.message, variant: 'destructive' })
-    } finally {
-      setDeleteCopyLoading(false)
+      toast({
+        title: 'Erro ao excluir exemplar',
+        description: err.message,
+        variant: 'destructive',
+      })
     }
   }
 
@@ -132,193 +172,251 @@ export function CopiesModal({
     switch (status) {
       case 'Disponivel':
         return (
-          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300">Disponível</Badge>
+          <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
+            Disponível
+          </Badge>
         )
       case 'Emprestado':
-        return <Badge className="bg-amber-100 text-amber-800 border-amber-300">Emprestado</Badge>
-      case 'Manutencao':
-        return <Badge className="bg-rose-100 text-rose-800 border-rose-300">Em Manutenção</Badge>
-      case 'Perdido':
         return (
-          <Badge className="bg-slate-200 text-slate-800 border-slate-300">Perdido / Baixado</Badge>
+          <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">
+            Emprestado
+          </Badge>
         )
+      case 'Reservado':
+        return (
+          <Badge className="bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/30">
+            Reservado
+          </Badge>
+        )
+      case 'Manutencao':
+      case 'EM_MANUTENCAO':
+      case 'Em Manutencao':
+        return (
+          <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 gap-1">
+            <Wrench className="w-3 h-3" /> Em Manutenção
+          </Badge>
+        )
+      case 'Perdido':
+        return <Badge variant="destructive">Perdido / Baixado</Badge>
       default:
-        return <Badge variant="outline">{status}</Badge>
+        return <Badge variant="secondary">{status}</Badge>
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[620px] max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-slate-900">
-            <Layers className="w-5 h-5 text-emerald-600" />
-            Controle de Exemplares Físicos
+          <DialogTitle className="text-xl">
+            Gerenciar Exemplares: {book?.titulo_de_livro}
           </DialogTitle>
-          <DialogDescription>
-            Obra: <span className="font-semibold text-slate-800">{titulo?.titulo_de_livro}</span> (
-            {titulo?.autor})
-          </DialogDescription>
+          <p className="text-xs text-muted-foreground">
+            Código: <span className="font-mono">{book?.id_titulo}</span> | Total de exemplares
+            cadastrados: <span className="font-semibold">{copies.length}</span>
+          </p>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          {/* Add copy form for operators/admins */}
-          {isOperadorOrAdmin && (
-            <form
-              onSubmit={handleAddCopies}
-              className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5"
-            >
-              <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
-                <Plus className="w-3.5 h-3.5 text-emerald-600" />
-                Adicionar Novas Cópias Físicas
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div className="sm:col-span-2">
-                  <Label htmlFor="loc" className="text-[11px] text-slate-600">
-                    Localização / Estante
-                  </Label>
-                  <Input
-                    id="loc"
-                    value={newLocation}
-                    onChange={(e) => setNewLocation(e.target.value)}
-                    placeholder="Ex: Estante B - 2ª Prateleira"
-                    className="h-8 text-xs bg-white"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="qty" className="text-[11px] text-slate-600">
-                    Qtd.
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="qty"
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={newQuantity}
-                      onChange={(e) => setNewQuantity(Number(e.target.value))}
-                      className="h-8 text-xs bg-white"
-                    />
-                    <Button
-                      type="submit"
-                      size="sm"
-                      className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3"
-                      disabled={addingCopy}
-                    >
-                      {addingCopy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Adicionar'}
-                    </Button>
-                  </div>
-                </div>
+        <div className="flex-1 overflow-y-auto space-y-5 py-2">
+          {/* Formulário para Adicionar Novos Exemplares */}
+          <form
+            onSubmit={handleAddCopies}
+            className="p-4 bg-muted/40 rounded-xl border border-border space-y-3"
+          >
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> Adicionar Novos Exemplares
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Quantidade</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={newCopiesQty}
+                  onChange={(e) => setNewCopiesQty(parseInt(e.target.value, 10) || 1)}
+                  className="text-sm"
+                />
               </div>
-            </form>
-          )}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium">Localização Física</Label>
+                <Input
+                  value={newCopiesLocation}
+                  onChange={(e) => setNewCopiesLocation(e.target.value)}
+                  placeholder="Ex: Estante A, Gaveta 2"
+                  className="text-sm"
+                />
+              </div>
+              <Button type="submit" disabled={adding} className="gap-1.5 w-full text-xs h-9">
+                {adding ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Plus className="w-3.5 h-3.5" />
+                )}
+                Adicionar
+              </Button>
+            </div>
+          </form>
 
-          {/* List of copies */}
+          {/* Tabela de Exemplares Existentes */}
           <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-slate-700">
-              Cópias Cadastradas ({exemplares.length})
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Exemplares Cadastrados
             </h4>
 
             {loading ? (
-              <div className="py-8 text-center text-slate-400 flex flex-col items-center justify-center gap-1">
-                <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
-                <span className="text-xs">Carregando exemplares...</span>
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
-            ) : exemplares.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-500 bg-slate-50 rounded-lg border border-dashed border-slate-300">
-                Nenhum exemplar físico registrado para esta obra. Adicione um acima.
+            ) : copies.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground text-sm border rounded-lg">
+                Nenhum exemplar cadastrado para este título.
               </div>
             ) : (
-              <div className="divide-y divide-slate-200 border rounded-lg overflow-hidden bg-white">
-                {exemplares.map((ex) => (
-                  <div
-                    key={ex.id_exemplar}
-                    className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/70 transition-colors"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded border">
-                          {ex.id_exemplar}
-                        </span>
-                        <span className="text-xs text-slate-500">Cópia #{ex.seq}</span>
-                        {getStatusBadge(ex.status)}
-                      </div>
-                      <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
-                        <MapPin className="w-3 h-3 text-slate-400" />
-                        <span>{ex.localizacao || 'Sem localização definida'}</span>
-                      </div>
-                    </div>
+              <div className="border rounded-lg overflow-hidden divide-y divide-border">
+                {copies.map((copy) => {
+                  const isEditing = editingId === copy.id_exemplar
 
-                    <div className="flex items-center gap-1.5 self-end sm:self-center">
-                      {ex.status === 'Disponivel' && onRequestLoan && isOperadorOrAdmin && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                          onClick={() => {
-                            onOpenChange(false)
-                            onRequestLoan(ex.id_exemplar)
-                          }}
-                        >
-                          <BookOpen className="w-3 h-3 mr-1" />
-                          Emprestar
-                        </Button>
-                      )}
+                  return (
+                    <div
+                      key={copy.id_exemplar}
+                      className="p-3.5 hover:bg-muted/30 transition-colors"
+                    >
+                      {isEditing ? (
+                        <div className="space-y-3 bg-muted/50 p-3 rounded-lg border border-border">
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono font-bold text-xs">
+                              Exemplar {copy.id_exemplar} (Seq #{copy.seq})
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handleSaveEdit(copy.id_exemplar)}
+                                disabled={savingEdit}
+                                className="h-7 px-2.5 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700"
+                              >
+                                {savingEdit ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Check className="w-3 h-3" />
+                                )}
+                                Salvar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={handleCancelEdit}
+                                disabled={savingEdit}
+                                className="h-7 px-2 text-xs"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </div>
 
-                      {isOperadorOrAdmin && (
-                        <>
-                          {ex.status === 'Disponivel' && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div className="space-y-1">
+                              <Label className="text-xs font-medium">Status do Exemplar</Label>
+                              <Select value={editStatus} onValueChange={setEditStatus}>
+                                <SelectTrigger className="h-8 text-xs">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Disponivel">Disponível</SelectItem>
+                                  <SelectItem value="Emprestado">Emprestado</SelectItem>
+                                  <SelectItem value="Reservado">Reservado</SelectItem>
+                                  <SelectItem value="Manutencao">Em Manutenção</SelectItem>
+                                  <SelectItem value="Perdido">Perdido / Baixa</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <Label className="text-xs font-medium">Localização Física</Label>
+                              <Input
+                                value={editLocation}
+                                onChange={(e) => setEditLocation(e.target.value)}
+                                className="h-8 text-xs"
+                                placeholder="Estante..."
+                              />
+                            </div>
+                          </div>
+
+                          {/* Campo de observação para Histórico Geral (F-03) */}
+                          <div className="space-y-1">
+                            <Label className="text-xs font-medium flex items-center gap-1">
+                              Observação / Motivo (Registrado no Histórico Geral)
+                            </Label>
+                            <Input
+                              value={editObservacao}
+                              onChange={(e) => setEditObservacao(e.target.value)}
+                              className="h-8 text-xs"
+                              placeholder="Ex: Capa solta, encadernação danificada, enviado para restauração..."
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-xs">
+                                {copy.id_exemplar}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                (Exemplar #{copy.seq})
+                              </span>
+                              {getStatusBadge(copy.status)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Localização:{' '}
+                              <span className="font-medium text-foreground">
+                                {copy.localizacao || 'Não especificada'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleStartEdit(copy)}
+                              className="h-8 px-2.5 text-xs gap-1"
+                              title="Editar status ou localização"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              Alterar Status
+                            </Button>
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-7 text-xs text-amber-700 hover:bg-amber-50"
-                              onClick={() => handleStatusChange(ex.id_exemplar, 'Manutencao')}
-                            >
-                              Manutenção
-                            </Button>
-                          )}
-                          {ex.status === 'Manutencao' && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 text-xs text-emerald-700 hover:bg-emerald-50"
-                              onClick={() => handleStatusChange(ex.id_exemplar, 'Disponivel')}
-                            >
-                              Liberar
-                            </Button>
-                          )}
-                          {ex.status !== 'Emprestado' && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-rose-500 hover:bg-rose-50"
-                              onClick={() => handleDeleteCopy(ex.id_exemplar)}
-                              title="Excluir este exemplar"
+                              onClick={() => handleDeleteCopy(copy.id_exemplar)}
+                              disabled={copy.status === 'Emprestado'}
+                              className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                              title={
+                                copy.status === 'Emprestado'
+                                  ? 'Não pode excluir exemplar emprestado'
+                                  : 'Excluir exemplar'
+                              }
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
-                          )}
-                        </>
+                          </div>
+                        </div>
                       )}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
         </div>
-      </DialogContent>
 
-      <ConfirmModal
-        open={deleteCopyConfirmOpen}
-        onOpenChange={setDeleteCopyConfirmOpen}
-        title="Remover Exemplar Físico"
-        description={`Deseja realmente remover o exemplar físico ${copyIdToDelete}? Esta ação excluirá este registro permanente de cópia.`}
-        confirmLabel="Sim, Remover Exemplar"
-        variant="destructive"
-        loading={deleteCopyLoading}
-        onConfirm={executeDeleteCopy}
-      />
+        <DialogFooter className="pt-4 border-t">
+          <Button variant="outline" size="sm" onClick={onClose}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
     </Dialog>
   )
 }

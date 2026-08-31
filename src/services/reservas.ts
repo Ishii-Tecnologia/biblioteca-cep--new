@@ -55,7 +55,45 @@ export const ReservasService = {
     return (data || []) as unknown as ReservaDetailed[]
   },
 
+  /**
+   * Conta reservas ativas pendentes para badge no cabeçalho (F-02)
+   */
+  async countActive(): Promise<number> {
+    const { count, error } = await supabase
+      .from('reserva')
+      .select('*', { count: 'exact', head: true })
+      .eq('status_reserva', 'Ativa')
+
+    if (error) return 0
+    return count ?? 0
+  },
+
   async create(id_titulo: string, id_leitor: number, operatorName?: string) {
+    // Regra F-08: Verificar se o livro possui exemplares disponíveis antes de reservar
+    // (Apenas permitir reserva se todos os exemplares estiverem emprestados ou em manutenção)
+    const { data: exemplares } = await supabase
+      .from('exemplar')
+      .select('id_exemplar, status')
+      .eq('id_titulo', id_titulo)
+
+    const disponiveis = (exemplares || []).filter((e) => e.status === 'Disponivel')
+    if (disponiveis.length > 0) {
+      throw new Error(
+        'Esta obra possui exemplar(es) disponível(is) na biblioteca. Realize o empréstimo direto em vez de reservar.',
+      )
+    }
+
+    // Regra F-08: Limite de 3 reservas ativas por usuário
+    const { count: userActiveReservas } = await supabase
+      .from('reserva')
+      .select('*', { count: 'exact', head: true })
+      .eq('id_leitor', id_leitor)
+      .eq('status_reserva', 'Ativa')
+
+    if ((userActiveReservas || 0) >= 3) {
+      throw new Error('Limite máximo de 3 reservas ativas simultâneas atingido para este leitor.')
+    }
+
     // 1. Check if user already has an active reservation for this book
     const { data: existing } = await supabase
       .from('reserva')
@@ -66,7 +104,7 @@ export const ReservasService = {
       .maybeSingle()
 
     if (existing) {
-      throw new Error('Você já possui uma reserva ativa para esta obra.')
+      throw new Error('Você já possui uma reserva ativa na fila para esta obra.')
     }
 
     // 2. Check reader not blocked
@@ -121,7 +159,6 @@ export const ReservasService = {
   },
 
   async cancel(id_reserva: number, operatorName?: string) {
-    // Buscar reserva antes de cancelar para obter título e leitor
     const { data: reserva } = await supabase
       .from('reserva')
       .select(`

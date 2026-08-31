@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
-import { TitulosService, TituloWithStats, Titulo } from '@/services/titulos'
+import { TitulosService, TituloWithStats, Titulo, TotaisAcervo } from '@/services/titulos'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
@@ -28,6 +28,12 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
+  UploadCloud,
+  ZoomIn,
+  Wrench,
+  Library,
+  Layers2,
+  Sparkles,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
@@ -38,8 +44,11 @@ import { BookMetadata } from '@/services/isbn'
 import { CopiesModal } from '@/components/CopiesModal'
 import { LoanModal } from '@/components/LoanModal'
 import { ReserveModal } from '@/components/ReserveModal'
+import { CsvImportModal } from '@/components/CsvImportModal'
+import { BookCoverLightboxModal } from '@/components/BookCoverLightboxModal'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { useToast } from '@/hooks/use-toast'
+import { useHeaderCounters } from '@/hooks/use-header-counters'
 
 interface BookSinopseProps {
   sinopse: string
@@ -104,11 +113,13 @@ export default function Acervo() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') || ''
 
-  const { isOperadorOrAdmin, isAdmin } = useAuth()
+  const { isOperadorOrAdmin, isAdmin, user } = useAuth()
   const { toast } = useToast()
+  const { refreshCounters } = useHeaderCounters()
 
   const [books, setBooks] = useState<TituloWithStats[]>([])
   const [categories, setCategories] = useState<string[]>([])
+  const [totais, setTotais] = useState<TotaisAcervo | null>(null)
   const [loading, setLoading] = useState(true)
 
   const [searchQuery, setSearchQuery] = useState(initialQuery)
@@ -118,9 +129,18 @@ export default function Acervo() {
   const [bookModalOpen, setBookModalOpen] = useState(false)
   const [bookToEdit, setBookToEdit] = useState<Titulo | null>(null)
   const [barcodeModalOpen, setBarcodeModalOpen] = useState(false)
+  const [csvImportModalOpen, setCsvImportModalOpen] = useState(false)
+
+  // Lightbox Zoom modal state (F-05)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [lightboxBook, setLightboxBook] = useState<{
+    title: string
+    author?: string
+    coverUrl?: string | null
+  } | null>(null)
 
   const [copiesModalOpen, setCopiesModalOpen] = useState(false)
-  const [selectedBookForCopies, setSelectedBookForCopies] = useState<Titulo | null>(null)
+  const [selectedBookForCopies, setSelectedBookForCopies] = useState<TituloWithStats | null>(null)
 
   const [loanModalOpen, setLoanModalOpen] = useState(false)
   const [preSelectedExemplar, setPreSelectedExemplar] = useState<string>('')
@@ -138,12 +158,15 @@ export default function Acervo() {
   const loadBooks = async () => {
     setLoading(true)
     try {
-      const [booksData, catsData] = await Promise.all([
+      const [booksData, catsData, totaisData] = await Promise.all([
         TitulosService.getAll(searchQuery, selectedCategory, true),
         TitulosService.getCategories(),
+        TitulosService.getTotais(),
       ])
       setBooks(booksData)
       setCategories(catsData)
+      setTotais(totaisData)
+      refreshCounters()
     } catch (err: any) {
       toast({
         title: 'Erro ao carregar acervo',
@@ -165,7 +188,7 @@ export default function Acervo() {
     loadBooks()
   }
 
-  const handleEditBook = (book: Titulo) => {
+  const handleEditBook = (book: TituloWithStats) => {
     setBookToEdit(book)
     setBookModalOpen(true)
   }
@@ -180,6 +203,9 @@ export default function Acervo() {
       id_titulo: '',
       titulo_de_livro: book.titulo_de_livro,
       autor: book.autor,
+      autor_espiritual: book.autor_espiritual || null,
+      autor_mediunico: book.autor_mediunico || null,
+      author_id: null,
       editora: book.editora || null,
       ano_publicacao: book.ano_publicacao || null,
       isbn: book.isbn || null,
@@ -193,9 +219,18 @@ export default function Acervo() {
     setBookModalOpen(true)
   }
 
-  const handleOpenCopies = (book: Titulo) => {
+  const handleOpenCopies = (book: TituloWithStats) => {
     setSelectedBookForCopies(book)
     setCopiesModalOpen(true)
+  }
+
+  const handleOpenLightbox = (book: TituloWithStats) => {
+    setLightboxBook({
+      title: book.titulo_de_livro,
+      author: book.autor_formatado || book.autor,
+      coverUrl: book.capa_url,
+    })
+    setLightboxOpen(true)
   }
 
   const handleDeleteBook = (id_titulo: string, title: string) => {
@@ -226,11 +261,6 @@ export default function Acervo() {
     }
   }
 
-  const handleDirectLoan = (exemplarId: string) => {
-    setPreSelectedExemplar(exemplarId)
-    setLoanModalOpen(true)
-  }
-
   const handleDirectReserve = (id_titulo: string) => {
     setPreSelectedTitulo(id_titulo)
     setReserveModalOpen(true)
@@ -253,6 +283,14 @@ export default function Acervo() {
         {isOperadorOrAdmin && (
           <div className="flex flex-wrap items-center gap-2">
             <Button
+              onClick={() => setCsvImportModalOpen(true)}
+              variant="outline"
+              className="border-primary/40 text-primary hover:bg-primary/10 font-medium gap-2 shadow-xs"
+            >
+              <UploadCloud className="w-4 h-4" />
+              Importar CSV
+            </Button>
+            <Button
               onClick={() => setBarcodeModalOpen(true)}
               variant="outline"
               className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-medium gap-2 shadow-xs"
@@ -271,6 +309,81 @@ export default function Acervo() {
         )}
       </div>
 
+      {/* Painel de Totais (F-10) */}
+      {totais && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <Card className="border-slate-200 shadow-2xs bg-white">
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+                <Library className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+                  Títulos Únicos
+                </p>
+                <p className="text-xl font-bold text-slate-900">{totais.totalTitulos}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200 shadow-2xs bg-white">
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100">
+                <Layers2 className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+                  Total de Exemplares
+                </p>
+                <p className="text-xl font-bold text-slate-900">{totais.totalExemplares}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200 shadow-2xs bg-white">
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+                  Disponíveis
+                </p>
+                <p className="text-xl font-bold text-emerald-600">{totais.totalDisponiveis}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200 shadow-2xs bg-white">
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600 border border-amber-100">
+                <Repeat className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+                  Emprestados
+                </p>
+                <p className="text-xl font-bold text-amber-600">{totais.totalEmprestados}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200 shadow-2xs bg-white col-span-2 sm:col-span-1">
+            <CardContent className="p-3.5 flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-100">
+                <Wrench className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+                  Em Manutenção
+                </p>
+                <p className="text-xl font-bold text-rose-600">{totais.totalManutencao}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Filter and Search Bar */}
       <Card className="border-slate-200 shadow-sm bg-white">
         <CardContent className="p-4">
@@ -278,7 +391,7 @@ export default function Acervo() {
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <Input
-                placeholder="Buscar por título, autor, editora, ISBN ou código (Ex: MC-001)..."
+                placeholder="Buscar por título, autor, espírito, médium, ISBN ou código (Ex: MC-001)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 text-xs sm:text-sm"
@@ -347,6 +460,8 @@ export default function Acervo() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {books.map((book) => {
             const hasAvailable = book.exemplares_disponiveis > 0
+            const hasCover = !!book.capa_url
+
             return (
               <Card
                 key={book.id_titulo}
@@ -366,26 +481,49 @@ export default function Acervo() {
                     </Badge>
                   </div>
 
-                  {/* Book Body: Cover + Title & Author */}
+                  {/* Book Body: Cover with Zoom + Title & Author (F-04 e F-05) */}
                   <div className="flex items-start gap-3">
-                    {book.capa_url && (
-                      <div className="w-14 h-20 bg-slate-100 rounded border border-slate-200 overflow-hidden shrink-0 shadow-2xs">
+                    <div
+                      onClick={() => handleOpenLightbox(book)}
+                      className={`w-14 h-20 rounded border overflow-hidden shrink-0 shadow-2xs relative group/cover cursor-pointer transition-transform hover:scale-105 ${
+                        hasCover
+                          ? 'bg-slate-100 border-slate-200'
+                          : 'bg-slate-100 border-slate-200 flex items-center justify-center text-slate-400'
+                      }`}
+                      title="Clique para ampliar a foto da capa"
+                    >
+                      {hasCover ? (
                         <img
-                          src={book.capa_url}
+                          src={book.capa_url!}
                           alt={book.titulo_de_livro}
                           className="w-full h-full object-cover"
+                          loading="lazy"
                         />
+                      ) : (
+                        <BookOpen className="w-6 h-6 stroke-[1.2]" />
+                      )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/cover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                        <ZoomIn className="w-4 h-4" />
                       </div>
-                    )}
+                    </div>
+
                     <div className="flex-1 min-w-0">
                       <h2 className="font-bold text-slate-900 text-base leading-snug group-hover:text-emerald-700 transition-colors line-clamp-2">
                         {book.titulo_de_livro}
                       </h2>
-                      <p className="text-xs font-semibold text-slate-600 mt-1">{book.autor}</p>
+
+                      {/* Exibição formatada do Autor / Espírito / Médium (F-04) */}
+                      <p className="text-xs font-semibold text-slate-700 mt-1 flex items-center gap-1 flex-wrap">
+                        {book.autor_espiritual && (
+                          <Sparkles className="w-3 h-3 text-amber-500 shrink-0 inline" />
+                        )}
+                        <span>{book.autor_formatado || book.autor}</span>
+                      </p>
+
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400 mt-2">
                         {book.editora && <span>Ed: {book.editora}</span>}
                         {book.ano_publicacao && <span>Ano: {book.ano_publicacao}</span>}
-                        {book.isbn && <span>ISBN: {book.isbn}</span>}
+                        {book.isbn && <span className="font-mono">ISBN: {book.isbn}</span>}
                       </div>
                     </div>
                   </div>
@@ -395,13 +533,16 @@ export default function Acervo() {
                     <BookSinopse sinopse={book.sinopse} />
                   )}
 
-                  {/* Stock Status Pill */}
+                  {/* Stock Status Pill (F-03) */}
                   <div className="pt-2">
                     <div
                       className={`p-2.5 rounded-lg border text-xs flex items-center justify-between ${
                         hasAvailable
                           ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
-                          : 'bg-amber-50/70 border-amber-200 text-amber-900'
+                          : book.exemplares_manutencao > 0 &&
+                              book.total_exemplares === book.exemplares_manutencao
+                            ? 'bg-rose-50/70 border-rose-200 text-rose-900'
+                            : 'bg-amber-50/70 border-amber-200 text-amber-900'
                       }`}
                     >
                       <div className="flex items-center gap-1.5 font-medium">
@@ -409,6 +550,12 @@ export default function Acervo() {
                           <>
                             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                             <span>{book.exemplares_disponiveis} exemplar(es) disponível(is)</span>
+                          </>
+                        ) : book.exemplares_manutencao > 0 &&
+                          book.total_exemplares === book.exemplares_manutencao ? (
+                          <>
+                            <Wrench className="w-4 h-4 text-rose-600" />
+                            <span>Exemplar(es) em manutenção</span>
                           </>
                         ) : (
                           <>
@@ -424,7 +571,7 @@ export default function Acervo() {
                   </div>
                 </div>
 
-                {/* Bottom Actions Bar */}
+                {/* Bottom Actions Bar (F-08: Ícone de Reserva ao lado de Emprestar) */}
                 <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1">
                     <Button
@@ -444,10 +591,7 @@ export default function Acervo() {
                         <Button
                           size="sm"
                           className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium gap-1"
-                          onClick={() => {
-                            // Find an available exemplar code or open copies
-                            handleOpenCopies(book)
-                          }}
+                          onClick={() => handleOpenCopies(book)}
                         >
                           <Repeat className="w-3.5 h-3.5" />
                           Emprestar
@@ -460,7 +604,7 @@ export default function Acervo() {
                           onClick={() => {
                             toast({
                               title: 'Disponível na Biblioteca',
-                              description: `Solicite a retirada física do exemplar ${book.id_titulo} no balcão de atendimento.`,
+                              description: `Solicite a retirada física da obra "${book.titulo_de_livro}" (${book.id_titulo}) no balcão de atendimento.`,
                             })
                           }}
                         >
@@ -471,8 +615,9 @@ export default function Acervo() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-8 text-xs border-amber-300 bg-amber-50/50 text-amber-800 hover:bg-amber-50/50 hover:text-amber-800 font-medium gap-1"
+                        className="h-8 text-xs border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 font-medium gap-1.5 shadow-2xs"
                         onClick={() => handleDirectReserve(book.id_titulo)}
+                        title="Reservar obra quando todos os exemplares estiverem ocupados"
                       >
                         <BookmarkCheck className="w-3.5 h-3.5 text-amber-700" />
                         Reservar
@@ -512,24 +657,42 @@ export default function Acervo() {
 
       {/* Modals */}
       <BookFormModal
-        open={bookModalOpen}
-        onOpenChange={setBookModalOpen}
+        isOpen={bookModalOpen}
+        onClose={() => setBookModalOpen(false)}
         bookToEdit={bookToEdit}
         onSuccess={loadBooks}
+        categories={categories}
       />
 
       <BarcodeScannerModal
         open={barcodeModalOpen}
         onOpenChange={setBarcodeModalOpen}
-        onBookFound={handleBookScannedDirectly}
+        onBookFound={(meta) => {
+          handleBookScannedDirectly(meta)
+          setBarcodeModalOpen(false)
+        }}
+      />
+
+      <CsvImportModal
+        isOpen={csvImportModalOpen}
+        onClose={() => setCsvImportModalOpen(false)}
+        onSuccess={loadBooks}
+        operatorName={user?.user_metadata?.name || user?.email || 'Administrador'}
+      />
+
+      <BookCoverLightboxModal
+        isOpen={lightboxOpen}
+        onClose={() => setLightboxOpen(false)}
+        title={lightboxBook?.title || ''}
+        author={lightboxBook?.author}
+        coverUrl={lightboxBook?.coverUrl}
       />
 
       <CopiesModal
-        open={copiesModalOpen}
-        onOpenChange={setCopiesModalOpen}
-        titulo={selectedBookForCopies}
-        onCopiesUpdated={loadBooks}
-        onRequestLoan={handleDirectLoan}
+        isOpen={copiesModalOpen}
+        onClose={() => setCopiesModalOpen(false)}
+        book={selectedBookForCopies}
+        onUpdate={loadBooks}
       />
 
       <LoanModal

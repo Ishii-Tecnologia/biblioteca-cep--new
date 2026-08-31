@@ -176,6 +176,19 @@ export const EmprestimosService = {
     }
   },
 
+  /**
+   * Conta empréstimos ativos para badges nos cabeçalhos (F-02)
+   */
+  async countActive(): Promise<number> {
+    const { count, error } = await supabase
+      .from('emprestimo')
+      .select('*', { count: 'exact', head: true })
+      .is('data_devolucao_real', null)
+
+    if (error) return 0
+    return count ?? 0
+  },
+
   async createLoan(id_exemplar: string, id_leitor: number, operatorName = 'Sistema') {
     // Check if the RPC emprestar_exemplar is available
     const { data, error } = await supabase.rpc('emprestar_exemplar', {

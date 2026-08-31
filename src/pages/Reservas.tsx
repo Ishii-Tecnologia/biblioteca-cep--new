@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/hooks/use-auth'
+import { useHeaderCounters } from '@/hooks/use-header-counters'
 import { ReservasService, ReservaDetailed } from '@/services/reservas'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -24,6 +25,7 @@ import { formatDate } from '@/lib/utils'
 export default function Reservas() {
   const { isOperadorOrAdmin } = useAuth()
   const { toast } = useToast()
+  const { refreshCounters } = useHeaderCounters()
 
   const [reservas, setReservas] = useState<ReservaDetailed[]>([])
   const [loading, setLoading] = useState(true)
@@ -43,6 +45,7 @@ export default function Reservas() {
     try {
       const data = await ReservasService.getAll(statusTab)
       setReservas(data)
+      refreshCounters()
     } catch (err: any) {
       toast({
         title: 'Erro ao carregar reservas',
@@ -74,7 +77,8 @@ export default function Reservas() {
       })
       setFulfillConfirmOpen(false)
       setReservaToFulfill(null)
-      loadReservas()
+      await loadReservas()
+      refreshCounters()
     } catch (err: any) {
       toast({
         title: 'Erro ao atender reserva',
@@ -102,7 +106,8 @@ export default function Reservas() {
       })
       setCancelConfirmOpen(false)
       setReservaToCancel(null)
-      loadReservas()
+      await loadReservas()
+      refreshCounters()
     } catch (err: any) {
       toast({
         title: 'Erro ao cancelar reserva',

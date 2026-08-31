@@ -386,7 +386,12 @@ export default function Index() {
       </div>
 
       {/* Modals */}
-      <BookFormModal open={bookModalOpen} onOpenChange={setBookModalOpen} onSuccess={loadData} />
+      <BookFormModal
+        isOpen={bookModalOpen}
+        onClose={() => setBookModalOpen(false)}
+        onSuccess={loadData}
+        categories={[]}
+      />
       <LoanModal open={loanModalOpen} onOpenChange={setLoanModalOpen} onSuccess={loadData} />
       <ReserveModal
         open={reserveModalOpen}
