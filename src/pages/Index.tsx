@@ -28,6 +28,7 @@ import {
   Library,
   BookMarked,
   CheckCircle2,
+  Wrench,
 } from 'lucide-react'
 import { BookFormModal } from '@/components/BookFormModal'
 import { LoanModal } from '@/components/LoanModal'
@@ -162,10 +163,23 @@ export default function Index() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">{stats.totalTitulos}</div>
-            <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-              <span className="font-semibold text-slate-700">{stats.totalExemplares}</span> cópias
-              físicas totais
-            </p>
+            <div className="text-xs text-slate-500 mt-1 space-y-0.5">
+              <p className="flex items-center gap-1">
+                <span className="font-semibold text-slate-700">{stats.totalExemplares}</span> cópias
+                físicas totais
+              </p>
+              {stats.exemplaresManutencao > 0 ? (
+                <p className="flex items-center gap-1 text-rose-600 font-medium">
+                  <Wrench className="w-3 h-3 shrink-0" />
+                  <span>{stats.exemplaresManutencao} em manutenção</span>
+                </p>
+              ) : (
+                <p className="flex items-center gap-1 text-slate-400">
+                  <Wrench className="w-3 h-3 shrink-0" />
+                  <span>0 em manutenção</span>
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 

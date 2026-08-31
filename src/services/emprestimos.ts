@@ -128,7 +128,10 @@ export const EmprestimosService = {
     const disponiveis = exemplares?.filter((e) => e.status === 'Disponivel').length || 0
     const emprestados = exemplares?.filter((e) => e.status === 'Emprestado').length || 0
     const manutencao =
-      exemplares?.filter((e) => e.status === 'Manutencao' || e.status === 'Perdido').length || 0
+      exemplares?.filter(
+        (e) =>
+          e.status === 'Manutencao' || e.status === 'EM_MANUTENCAO' || e.status === 'Em Manutencao',
+      ).length || 0
 
     // 2. Active readers
     const { count: totalLeitores } = await supabase
