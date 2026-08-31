@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -28,13 +27,17 @@ import {
   Loader2,
   Camera,
   AlertCircle,
-  HelpCircle,
   CheckCircle2,
   BookOpen,
+  Image as ImageIcon,
+  ClipboardPaste,
+  Trash2,
+  User,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { uploadImageToStorage } from '@/lib/image-upload'
 import { BookMetadata } from '@/services/isbn'
+import { ParametrosService } from '@/services/parametros'
 
 interface BookFormModalProps {
   isOpen: boolean
@@ -60,7 +63,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
   const [autorEspiritual, setAutorEspiritual] = useState('')
   const [autorMediunico, setAutorMediunico] = useState('')
   const [autor, setAutor] = useState('')
-  const [isMediumistic, setIsMediumistic] = useState(false)
+  const [authorStructure, setAuthorStructure] = useState<'ESPIRITO_MEDIUM' | 'CONVENCIONAL'>('ESPIRITO_MEDIUM')
   const [editora, setEditora] = useState('')
   const [anoPublicacao, setAnoPublicacao] = useState<number | ''>('')
   const [categoria, setCategoria] = useState('')
@@ -73,11 +76,29 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
   const [numExemplares, setNumExemplares] = useState(1)
   const [localizacao, setLocalizacao] = useState('Estante Geral')
 
+  // Dynamic labels from parametros
+  const [labelEspiritoMedium, setLabelEspiritoMedium] = useState('Espírito + Médium')
+  const [labelConvencional, setLabelConvencional] = useState('Autor Convencional')
+
   const [loading, setLoading] = useState(false)
   const [loadingIsbn, setLoadingIsbn] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [isbnError, setIsbnError] = useState<string | null>(null)
   const [isScannerOpen, setIsScannerOpen] = useState(false)
+
+  const coverPasteBoxRef = useRef<HTMLDivElement>(null)
+
+  // Carregar rótulos customizados das configurações
+  useEffect(() => {
+    if (isOpen) {
+      ParametrosService.getByName('label_estrutura_espirito_medium', 'Espírito + Médium')
+        .then(setLabelEspiritoMedium)
+        .catch(() => setLabelEspiritoMedium('Espírito + Médium'))
+      ParametrosService.getByName('label_estrutura_convencional', 'Autor Convencional')
+        .then(setLabelConvencional)
+        .catch(() => setLabelConvencional('Autor Convencional'))
+    }
+  }, [isOpen])
 
   // Preenche formulário ao editar ou abrir
   useEffect(() => {
@@ -88,7 +109,8 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       setAutorEspiritual(bookToEdit.autor_espiritual || '')
       setAutorMediunico(bookToEdit.autor_mediunico || '')
       setAutor(bookToEdit.autor || '')
-      setIsMediumistic(!!(bookToEdit.autor_espiritual || bookToEdit.autor_mediunico))
+      const isEspMed = !!(bookToEdit.autor_espiritual || bookToEdit.autor_mediunico)
+      setAuthorStructure(isEspMed ? 'ESPIRITO_MEDIUM' : 'CONVENCIONAL')
       setEditora(bookToEdit.editora || '')
       setAnoPublicacao(bookToEdit.ano_publicacao || '')
       setCategoria(bookToEdit.categoria || '')
@@ -103,7 +125,8 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       setAutorEspiritual('')
       setAutorMediunico('')
       setAutor('')
-      setIsMediumistic(false)
+      // Default: Espírito + Médium
+      setAuthorStructure('ESPIRITO_MEDIUM')
       setEditora('')
       setAnoPublicacao('')
       setCategoria(categories[0] || 'Geral')
@@ -162,9 +185,10 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       if (meta.titulo_de_livro) setTituloDeLivro(meta.titulo_de_livro)
       if (meta.autor) {
         setAutor(meta.autor)
-        if (!isMediumistic) {
-          setAutorEspiritual('')
-          setAutorMediunico('')
+        if (authorStructure === 'ESPIRITO_MEDIUM') {
+          // Se trouxer autor espiritual ou convencional
+          if (meta.autor_espiritual) setAutorEspiritual(meta.autor_espiritual)
+          if (meta.autor_mediunico) setAutorMediunico(meta.autor_mediunico)
         }
       }
       if (meta.editora) setEditora(meta.editora)
@@ -212,6 +236,90 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
     }
   }
 
+  // Tratar colar imagem da área de transferência (Ctrl+V ou botão Colar)
+  const handlePasteImageFromClipboard = async (e?: React.ClipboardEvent) => {
+    if (e) {
+      const items = e.clipboardData?.items
+      if (items) {
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image') !== -1) {
+            const blob = items[i].getAsFile()
+            if (blob) {
+              e.preventDefault()
+              await processPastedImageBlob(blob)
+              return
+            }
+          }
+        }
+        const text = e.clipboardData.getData('text')
+        if (text && (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('data:image/'))) {
+          setCapaUrl(text.trim())
+          toast({
+            title: 'URL da capa colada',
+            description: 'Link da imagem aplicado com sucesso.',
+          })
+          return
+        }
+      }
+    } else {
+      try {
+        if (navigator.clipboard && navigator.clipboard.read) {
+          const clipboardItems = await navigator.clipboard.read()
+          for (const item of clipboardItems) {
+            const imageType = item.types.find((t) => t.startsWith('image/'))
+            if (imageType) {
+              const blob = await item.getType(imageType)
+              await processPastedImageBlob(new File([blob], 'capa_colada.png', { type: imageType }))
+              return
+            }
+          }
+        }
+        if (navigator.clipboard && navigator.clipboard.readText) {
+          const text = await navigator.clipboard.readText()
+          if (text && (text.startsWith('http://') || text.startsWith('https://') || text.startsWith('data:image/'))) {
+            setCapaUrl(text.trim())
+            toast({
+              title: 'URL da capa colada',
+              description: 'Link da imagem aplicado com sucesso.',
+            })
+            return
+          }
+        }
+        toast({
+          title: 'Nenhuma imagem na área de transferência',
+          description: 'Copie uma imagem ou link (URL) antes de colar.',
+          variant: 'destructive',
+        })
+      } catch (err: any) {
+        toast({
+          title: 'Aviso',
+          description: 'Use Ctrl+V no campo ou selecione um arquivo de imagem.',
+        })
+      }
+    }
+  }
+
+  const processPastedImageBlob = async (file: File) => {
+    setUploadingImage(true)
+    try {
+      const publicUrl = await uploadImageToStorage(file, 'capas')
+      setCapaUrl(publicUrl)
+      toast({
+        title: 'Imagem colada e salva!',
+        description: 'A foto da capa foi salva no servidor.',
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao processar imagem colada',
+        description: err.message || 'Falha ao fazer upload da imagem.',
+        variant: 'destructive',
+      })
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
+  // Scanner acionado internamente dentro do modal
   const handleScanSuccess = (meta: BookMetadata) => {
     if (meta.isbn) {
       setIsbn(meta.isbn)
@@ -220,12 +328,25 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
     if (meta.titulo_de_livro) setTituloDeLivro(meta.titulo_de_livro)
     if (meta.autor) {
       setAutor(meta.autor)
+      if (meta.autor_espiritual) {
+        setAutorEspiritual(meta.autor_espiritual)
+        setAuthorStructure('ESPIRITO_MEDIUM')
+      }
+      if (meta.autor_mediunico) {
+        setAutorMediunico(meta.autor_mediunico)
+        setAuthorStructure('ESPIRITO_MEDIUM')
+      }
     }
     if (meta.editora) setEditora(meta.editora)
     if (meta.ano_publicacao) setAnoPublicacao(meta.ano_publicacao)
     if (meta.sinopse) setSinopse(meta.sinopse)
     if (meta.capa_url && !capaUrl) setCapaUrl(meta.capa_url)
     if (meta.categoria && !categoria) setCategoria(meta.categoria)
+
+    toast({
+      title: 'Livro identificado!',
+      description: `Código lido com sucesso para "${meta.titulo_de_livro || meta.isbn}".`,
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -241,12 +362,14 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       return
     }
 
-    // Validação de Autoria (F-04 e F-06)
+    const isMediumistic = authorStructure === 'ESPIRITO_MEDIUM'
+
+    // Validação de Autoria
     if (isMediumistic) {
       if (!autorEspiritual.trim() && !autorMediunico.trim()) {
         toast({
           title: 'Autoria incompleta',
-          description: 'Informe ao menos o Autor Espiritual ou o Médium.',
+          description: `Informe ao menos o Autor Espiritual ou o Médium para a estrutura "${labelEspiritoMedium}".`,
           variant: 'destructive',
         })
         return
@@ -262,7 +385,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       }
     }
 
-    // F-09: ISBN Obrigatório para NOVOS cadastros (Decisão de Produto)
+    // ISBN Obrigatório para NOVOS cadastros
     if (!isEditing && !isbn.trim()) {
       setIsbnError('O ISBN é obrigatório para novos cadastros.')
       toast({
@@ -367,16 +490,119 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-6">
+          <DialogHeader className="pb-2 border-b">
             <DialogTitle className="text-xl flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-primary" />
+              <BookOpen className="w-5 h-5 text-emerald-600" />
               {isEditing ? 'Editar Livro no Acervo' : 'Novo Livro no Acervo'}
             </DialogTitle>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4 pt-2">
-            {/* ISBN com busca automática e leitor de código de barras */}
+            {/* 1. SEÇÃO DE FOTO DA CAPA NO INÍCIO COM ÁREA PARA COLAR (Ctrl+V) */}
+            <div
+              ref={coverPasteBoxRef}
+              onPaste={handlePasteImageFromClipboard}
+              tabIndex={0}
+              className="p-3.5 rounded-xl border-2 border-dashed border-slate-200 hover:border-emerald-500/50 bg-slate-50/70 dark:bg-slate-900/30 transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+            >
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+                {/* Preview da Capa */}
+                <div className="w-24 h-32 rounded-lg border border-slate-200 bg-white overflow-hidden shrink-0 shadow-xs relative flex items-center justify-center group">
+                  {capaUrl ? (
+                    <>
+                      <img
+                        src={capaUrl}
+                        alt="Capa do Livro"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setCapaUrl('')}
+                        title="Remover capa"
+                        className="absolute top-1 right-1 p-1 rounded-md bg-black/60 text-white hover:bg-rose-600 transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center text-slate-400 p-2 text-center">
+                      <ImageIcon className="w-8 h-8 mb-1 stroke-1" />
+                      <span className="text-[10px] leading-tight">Sem Capa</span>
+                    </div>
+                  )}
+                  {uploadingImage && (
+                    <div className="absolute inset-0 bg-white/80 dark:bg-black/80 flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Inputs e Ações de Imagem */}
+                <div className="flex-1 min-w-0 space-y-2 w-full">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                      <ImageIcon className="w-4 h-4 text-emerald-600" />
+                      Foto da Capa do Livro
+                    </Label>
+                    {capaUrl && (
+                      <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3" /> Imagem vinculada
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-slate-500">
+                    Você pode colar a imagem diretamente com <strong>Ctrl+V</strong>, colar uma URL ou fazer upload de um arquivo.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Input
+                      value={capaUrl}
+                      onChange={(e) => setCapaUrl(e.target.value)}
+                      placeholder="https://... ou cole com Ctrl+V"
+                      className="text-xs font-mono bg-white flex-1"
+                    />
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePasteImageFromClipboard()}
+                        title="Colar imagem ou link da área de transferência"
+                        className="text-xs h-8 gap-1 border-slate-300 hover:bg-slate-100"
+                      >
+                        <ClipboardPaste className="w-3.5 h-3.5 text-emerald-600" />
+                        Colar Imagem
+                      </Button>
+
+                      <Label
+                        htmlFor="cover-upload-top"
+                        className="cursor-pointer inline-flex items-center justify-center gap-1 px-2.5 h-8 text-xs border border-slate-300 rounded-md bg-white hover:bg-slate-100 text-slate-700 shrink-0"
+                      >
+                        {uploadingImage ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                        )}
+                        Upload
+                      </Label>
+                      <input
+                        id="cover-upload-top"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                        disabled={uploadingImage}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. ISBN COM BOTÃO "LER CÓDIGO DE BARRAS" INTERNO */}
             <div className="space-y-1.5 p-3.5 bg-muted/30 rounded-xl border border-border">
               <div className="flex items-center justify-between">
                 <Label htmlFor="isbn" className="font-semibold text-xs flex items-center gap-1.5">
@@ -409,10 +635,11 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                   variant="outline"
                   size="sm"
                   onClick={() => setIsScannerOpen(true)}
-                  title="Escanear com a câmera ou leitor"
-                  className="px-2.5 shrink-0"
+                  title="Ler código de barras via câmera para preencher dados"
+                  className="px-2.5 shrink-0 gap-1.5 border-emerald-600/40 text-emerald-700 hover:bg-emerald-50"
                 >
                   <Camera className="w-4 h-4" />
+                  <span className="hidden sm:inline text-xs font-medium">Ler Código de Barras</span>
                 </Button>
 
                 <Button
@@ -440,7 +667,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
               )}
             </div>
 
-            {/* Título da Obra */}
+            {/* 3. TÍTULO DA OBRA */}
             <div className="space-y-1.5">
               <Label htmlFor="titulo" className="text-xs font-semibold">
                 Título da Obra <span className="text-rose-500">*</span>
@@ -455,65 +682,109 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
               />
             </div>
 
-            {/* Separador de Autoria Espírita / Convencional (F-04 e F-06) */}
+            {/* 4. ESTRUTURA DE AUTORIA: DROPDOWN COM "ESPÍRITO + MÉDIUM" DEFAULT NA COR VERDE */}
             <div className="p-3.5 rounded-xl border border-border bg-card space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <Label className="text-xs font-semibold">Estrutura de Autoria</Label>
+                  <Label htmlFor="author-structure-select" className="text-xs font-semibold text-slate-900">
+                    Estrutura de Autoria
+                  </Label>
                   <p className="text-[11px] text-muted-foreground">
-                    Ative caso a obra possua autor espiritual (espírito) psicografado por médium
+                    Selecione o formato de autoria da obra para preenchimento dos campos correspondentes.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium">
-                    {isMediumistic ? 'Espírito + Médium' : 'Autor Convencional'}
-                  </span>
-                  <Switch
-                    checked={isMediumistic}
-                    onCheckedChange={(checked) => setIsMediumistic(checked)}
-                  />
+
+                <div className="w-full sm:w-56">
+                  <Select
+                    value={authorStructure}
+                    onValueChange={(val: 'ESPIRITO_MEDIUM' | 'CONVENCIONAL') => setAuthorStructure(val)}
+                  >
+                    <SelectTrigger
+                      id="author-structure-select"
+                      className={`text-xs font-semibold border ${
+                        authorStructure === 'ESPIRITO_MEDIUM'
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-800 hover:bg-emerald-100/80 focus:ring-emerald-500'
+                          : 'border-slate-300 bg-slate-50 text-slate-800 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        {authorStructure === 'ESPIRITO_MEDIUM' ? (
+                          <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        ) : (
+                          <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        )}
+                        <SelectValue />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem
+                        value="ESPIRITO_MEDIUM"
+                        className="text-xs font-semibold text-emerald-700 focus:bg-emerald-50 focus:text-emerald-800"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>{labelEspiritoMedium} (Padrão)</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="CONVENCIONAL" className="text-xs font-medium text-slate-700">
+                        <div className="flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-slate-500" />
+                          <span>{labelConvencional}</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              {isMediumistic ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium flex items-center gap-1">
-                      <Sparkles className="w-3 h-3 text-amber-500" />
-                      Autor Espiritual (Espírito)
-                    </Label>
-                    <AuthorCombobox
-                      value={autorEspiritual}
-                      onChange={(name) => setAutorEspiritual(name)}
-                      authorType="ESPIRITO"
-                      isSpirit={true}
-                      placeholder="Ex: André Luiz, Emmanuel, Joanna..."
-                    />
-                  </div>
+              {/* CAMPOS DE AUTOR: ALINHAMENTO DAS LABELS E DOS INPUTS EM 2 COLUNAS IGUAIS */}
+              {authorStructure === 'ESPIRITO_MEDIUM' ? (
+                <div className="pt-2 border-t border-slate-100">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                    {/* Coluna 1: Autor Espiritual */}
+                    <div className="space-y-1.5 flex flex-col justify-start">
+                      <Label className="text-xs font-medium text-slate-800 flex items-center gap-1 h-5">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>Autor Espiritual (Espírito)</span>
+                      </Label>
+                      <AuthorCombobox
+                        value={autorEspiritual}
+                        onChange={(name) => setAutorEspiritual(name)}
+                        authorType="ESPIRITO"
+                        isSpirit={true}
+                        placeholder="Ex: André Luiz, Emmanuel, Joanna..."
+                      />
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Médium / Psicografia</Label>
-                    <AuthorCombobox
-                      value={autorMediunico}
-                      onChange={(name) => setAutorMediunico(name)}
-                      authorType="MEDIUM"
-                      placeholder="Ex: Chico Xavier, Divaldo Franco..."
-                    />
+                    {/* Coluna 2: Médium / Psicografia */}
+                    <div className="space-y-1.5 flex flex-col justify-start">
+                      <Label className="text-xs font-medium text-slate-800 flex items-center gap-1 h-5">
+                        <User className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span>Médium / Psicografia</span>
+                      </Label>
+                      <AuthorCombobox
+                        value={autorMediunico}
+                        onChange={(name) => setAutorMediunico(name)}
+                        authorType="MEDIUM"
+                        placeholder="Ex: Chico Xavier, Divaldo Franco..."
+                      />
+                    </div>
                   </div>
 
                   {(autorEspiritual || autorMediunico) && (
-                    <div className="col-span-full text-xs text-muted-foreground bg-muted/50 p-2 rounded-md">
+                    <div className="mt-3 text-xs text-muted-foreground bg-emerald-50/60 border border-emerald-100 p-2.5 rounded-lg">
                       Exibição formatada:{' '}
-                      <strong className="text-foreground">
+                      <strong className="text-emerald-950 font-semibold">
                         {formatAuthorDisplay(autorEspiritual, autorMediunico)}
                       </strong>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="space-y-1.5 pt-1">
-                  <Label className="text-xs font-medium">
-                    Autor(es) da Obra <span className="text-rose-500">*</span>
+                <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                  <Label className="text-xs font-medium text-slate-800 flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Autor(es) da Obra</span> <span className="text-rose-500">*</span>
                   </Label>
                   <AuthorCombobox
                     value={autor}
@@ -525,7 +796,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
               )}
             </div>
 
-            {/* Linha: Categoria, Editora, Ano */}
+            {/* 5. LINHA: CATEGORIA, EDITORA, ANO */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">Categoria</Label>
@@ -570,7 +841,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
               </div>
             </div>
 
-            {/* Linha: Volume e Código Interno (se edição) */}
+            {/* 6. LINHA: VOLUME E CÓDIGO INTERNO */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">Volume / Tomo (Opcional)</Label>
@@ -604,59 +875,19 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
               )}
             </div>
 
-            {/* Capa e Sinopse */}
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium flex items-center justify-between">
-                  <span>URL da Capa ou Foto</span>
-                  {capaUrl && (
-                    <span className="text-[11px] text-emerald-600 font-normal">
-                      ✓ Imagem vinculada
-                    </span>
-                  )}
-                </Label>
-                <div className="flex gap-2">
-                  <Input
-                    value={capaUrl}
-                    onChange={(e) => setCapaUrl(e.target.value)}
-                    placeholder="https://... ou faça upload"
-                    className="text-sm flex-1 font-mono text-xs"
-                  />
-                  <Label
-                    htmlFor="cover-upload"
-                    className="cursor-pointer inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs border rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 shrink-0"
-                  >
-                    {uploadingImage ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Upload className="w-3.5 h-3.5" />
-                    )}
-                    Upload
-                  </Label>
-                  <input
-                    id="cover-upload"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                    disabled={uploadingImage}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Sinopse / Descrição</Label>
-                <Textarea
-                  value={sinopse}
-                  onChange={(e) => setSinopse(e.target.value)}
-                  placeholder="Breve resumo sobre os temas tratados na obra..."
-                  className="text-sm resize-none"
-                  rows={2}
-                />
-              </div>
+            {/* 7. SINOPSE */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Sinopse / Descrição</Label>
+              <Textarea
+                value={sinopse}
+                onChange={(e) => setSinopse(e.target.value)}
+                placeholder="Breve resumo sobre os temas tratados na obra..."
+                className="text-sm resize-none"
+                rows={2}
+              />
             </div>
 
-            {/* Exemplares iniciais (apenas na criação) */}
+            {/* 8. EXEMPLARES INICIAIS (APENAS CRIAÇÃO) */}
             {!isEditing && (
               <div className="p-3.5 bg-muted/40 rounded-xl border border-border grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -687,7 +918,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
               <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={loading} className="gap-2">
+              <Button type="submit" disabled={loading} className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white">
                 {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                 {isEditing ? 'Salvar Alterações' : 'Cadastrar Livro'}
               </Button>

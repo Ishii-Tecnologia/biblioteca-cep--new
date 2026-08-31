@@ -11,8 +11,6 @@ import {
   Zap,
   Info,
   RotateCcw,
-  BookCopy,
-  CalendarDays,
   Building2,
   ShieldCheck,
   Sparkles,
@@ -22,6 +20,9 @@ import {
   Trash2,
   Check,
   X,
+  FileSpreadsheet,
+  Download,
+  Users2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,41 +32,18 @@ import { Badge } from '@/components/ui/badge'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { CategoriasService, Categoria } from '@/services/categorias'
 
-interface SystemParam {
-  id?: string
-  chave: string
-  valor: string
-  descricao?: string | null
-  updated_at?: string
-}
-
-const DEFAULT_PARAMS: Record<
-  | 'prazo_emprestimo_dias'
-  | 'prazo_renovacao_dias'
-  | 'max_renovacoes'
-  | 'max_exemplares_por_leitor'
-  | 'prazo_reserva_dias'
-  | 'nome_biblioteca',
-  {
-    defaultValue: string
-    label: string
-    description: string
-    type: 'number' | 'text'
-    min?: number
-    max?: number
-  }
-> = {
+const DEFAULT_PARAMS = {
   nome_biblioteca: {
     defaultValue: 'Biblioteca CEP',
     label: 'Nome da Biblioteca / Instituição',
     description: 'Identificação padrão exibida no cabeçalho, relatórios e comprovantes.',
-    type: 'text',
+    type: 'text' as const,
   },
   prazo_emprestimo_dias: {
     defaultValue: '15',
     label: 'Prazo Padrão de Empréstimo (Dias Corridos)',
     description: 'Quantidade de dias corridos para devolução ao criar novos empréstimos.',
-    type: 'number',
+    type: 'number' as const,
     min: 1,
     max: 180,
   },
@@ -73,7 +51,7 @@ const DEFAULT_PARAMS: Record<
     defaultValue: '15',
     label: 'Prazo de Renovação (Dias Corridos)',
     description: 'Quantidade de dias corridos acrescentados a cada renovação de empréstimo.',
-    type: 'number',
+    type: 'number' as const,
     min: 1,
     max: 180,
   },
@@ -81,7 +59,7 @@ const DEFAULT_PARAMS: Record<
     defaultValue: '1',
     label: 'Limite Máximo de Renovações',
     description: 'Quantidade máxima de vezes que um mesmo empréstimo pode ser renovado.',
-    type: 'number',
+    type: 'number' as const,
     min: 0,
     max: 10,
   },
@@ -89,7 +67,7 @@ const DEFAULT_PARAMS: Record<
     defaultValue: '3',
     label: 'Limite de Exemplares Simultâneos por Leitor',
     description: 'Número máximo de livros ativos emprestados simultaneamente por leitor.',
-    type: 'number',
+    type: 'number' as const,
     min: 1,
     max: 20,
   },
@@ -97,9 +75,21 @@ const DEFAULT_PARAMS: Record<
     defaultValue: '5',
     label: 'Prazo de Tolerância de Reserva (Dias Corridos)',
     description: 'Dias em que um exemplar reservado fica retido aguardando retirada pelo leitor.',
-    type: 'number',
+    type: 'number' as const,
     min: 1,
     max: 30,
+  },
+  label_estrutura_espirito_medium: {
+    defaultValue: 'Espírito + Médium',
+    label: 'Rótulo da Estrutura: Espírito + Médium',
+    description: 'Nome personalizado exibido no seletor de autoria para livros psicografados / mediúnicos.',
+    type: 'text' as const,
+  },
+  label_estrutura_convencional: {
+    defaultValue: 'Autor Convencional',
+    label: 'Rótulo da Estrutura: Autor Convencional',
+    description: 'Nome personalizado exibido no seletor de autoria para autores encarnados / literatura geral.',
+    type: 'text' as const,
   },
 }
 
@@ -138,6 +128,12 @@ export default function Configuracoes() {
     DEFAULT_PARAMS.prazo_reserva_dias.defaultValue,
   )
   const [nomeBiblioteca, setNomeBiblioteca] = useState(DEFAULT_PARAMS.nome_biblioteca.defaultValue)
+  const [labelEspiritoMedium, setLabelEspiritoMedium] = useState(
+    DEFAULT_PARAMS.label_estrutura_espirito_medium.defaultValue,
+  )
+  const [labelConvencional, setLabelConvencional] = useState(
+    DEFAULT_PARAMS.label_estrutura_convencional.defaultValue,
+  )
 
   const loadParams = async () => {
     setLoading(true)
@@ -155,7 +151,6 @@ export default function Configuracoes() {
         if (paramMap.has('prazo_emprestimo_dias')) {
           setPrazoEmprestimoDias(paramMap.get('prazo_emprestimo_dias')!)
         } else if (paramMap.has('prazo_devolucao_dias')) {
-          // fallback compatibility
           setPrazoEmprestimoDias(paramMap.get('prazo_devolucao_dias')!)
         }
 
@@ -177,6 +172,14 @@ export default function Configuracoes() {
 
         if (paramMap.has('nome_biblioteca')) {
           setNomeBiblioteca(paramMap.get('nome_biblioteca')!)
+        }
+
+        if (paramMap.has('label_estrutura_espirito_medium')) {
+          setLabelEspiritoMedium(paramMap.get('label_estrutura_espirito_medium')!)
+        }
+
+        if (paramMap.has('label_estrutura_convencional')) {
+          setLabelConvencional(paramMap.get('label_estrutura_convencional')!)
         }
       }
     } catch (err: any) {
@@ -206,6 +209,30 @@ export default function Configuracoes() {
     loadParams()
     loadCategories()
   }, [])
+
+  const handleDownloadTemplateCsv = () => {
+    const csvContent =
+      'isbn;titulo;autor_espiritual;autor_mediunico;autor;editora;ano_publicacao;categoria;sinopse;exemplares;localizacao\n' +
+      '9788573286885;Nosso Lar;André Luiz;Chico Xavier;;FEB;2010;Doutrinário Espírita;A vida no mundo espiritual narrada pelo espírito André Luiz.;2;Estante 1\n' +
+      '9788573286878;O Livro dos Espíritos;;;Allan Kardec;FEB;2015;Obras Básicas;Filosofia e ciência espírita.;3;Estante Central\n' +
+      '9788579450006;Missionários da Luz;André Luiz;Chico Xavier;;FEB;2011;Doutrinário Espírita;Estudo sobre os processos de reencarnação.;1;Estante 2\n'
+
+    // Adiciona BOM UTF-8 (\uFEFF) para Excel abrir perfeitamente com acentuação em PT-BR
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', 'template_cadastro_livros_cep.csv')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    toast({
+      title: 'Download iniciado',
+      description: 'Template CSV exportado com sucesso (compatível com Excel e LibreOffice).',
+    })
+  }
 
   const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -337,6 +364,20 @@ export default function Configuracoes() {
         valor: String(nomeBiblioteca || DEFAULT_PARAMS.nome_biblioteca.defaultValue).trim(),
         descricao: DEFAULT_PARAMS.nome_biblioteca.description,
       },
+      {
+        chave: 'label_estrutura_espirito_medium',
+        valor: String(
+          labelEspiritoMedium || DEFAULT_PARAMS.label_estrutura_espirito_medium.defaultValue,
+        ).trim(),
+        descricao: DEFAULT_PARAMS.label_estrutura_espirito_medium.description,
+      },
+      {
+        chave: 'label_estrutura_convencional',
+        valor: String(
+          labelConvencional || DEFAULT_PARAMS.label_estrutura_convencional.defaultValue,
+        ).trim(),
+        descricao: DEFAULT_PARAMS.label_estrutura_convencional.description,
+      },
     ]
 
     try {
@@ -348,7 +389,7 @@ export default function Configuracoes() {
 
       toast({
         title: 'Configurações salvas com sucesso!',
-        description: 'Todos os parâmetros operacionais da biblioteca foram atualizados.',
+        description: 'Todos os parâmetros operacionais e rótulos de autoria foram gravados.',
       })
 
       await loadParams()
@@ -370,6 +411,8 @@ export default function Configuracoes() {
     setMaxExemplaresPorLeitor(DEFAULT_PARAMS.max_exemplares_por_leitor.defaultValue)
     setPrazoReservaDias(DEFAULT_PARAMS.prazo_reserva_dias.defaultValue)
     setNomeBiblioteca(DEFAULT_PARAMS.nome_biblioteca.defaultValue)
+    setLabelEspiritoMedium(DEFAULT_PARAMS.label_estrutura_espirito_medium.defaultValue)
+    setLabelConvencional(DEFAULT_PARAMS.label_estrutura_convencional.defaultValue)
 
     toast({
       title: 'Valores padrão restaurados no formulário',
@@ -410,8 +453,7 @@ export default function Configuracoes() {
             Configurações do Sistema
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Gerencie os parâmetros operacionais, prazos de devolução, limites de acervo e rotinas da
-            biblioteca.
+            Gerencie os parâmetros operacionais, prazos, estruturas de autoria, modelo CSV e rotinas da biblioteca.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -465,6 +507,103 @@ export default function Configuracoes() {
                 <p className="text-[11px] text-slate-500">
                   {DEFAULT_PARAMS.nome_biblioteca.description}
                 </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card: Rótulos e Estrutura de Autoria */}
+          <Card className="border-slate-200 bg-white shadow-xs">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Users2 className="w-5 h-5 text-emerald-600" />
+                Estruturas & Rótulos de Autoria
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Personalize os títulos e rótulos exibidos nos formulários de cadastro de livros e seletores de autoria.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="label_espirito_medium" className="text-xs font-semibold text-slate-700">
+                      {DEFAULT_PARAMS.label_estrutura_espirito_medium.label}
+                    </Label>
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      chave: label_estrutura_espirito_medium
+                    </span>
+                  </div>
+                  <Input
+                    id="label_espirito_medium"
+                    type="text"
+                    value={labelEspiritoMedium}
+                    onChange={(e) => setLabelEspiritoMedium(e.target.value)}
+                    disabled={!isAdmin || saving}
+                    placeholder="Espírito + Médium"
+                    className="text-sm font-medium"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    {DEFAULT_PARAMS.label_estrutura_espirito_medium.description}
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="label_convencional" className="text-xs font-semibold text-slate-700">
+                      {DEFAULT_PARAMS.label_estrutura_convencional.label}
+                    </Label>
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      chave: label_estrutura_convencional
+                    </span>
+                  </div>
+                  <Input
+                    id="label_convencional"
+                    type="text"
+                    value={labelConvencional}
+                    onChange={(e) => setLabelConvencional(e.target.value)}
+                    disabled={!isAdmin || saving}
+                    placeholder="Autor Convencional"
+                    className="text-sm font-medium"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    {DEFAULT_PARAMS.label_estrutura_convencional.description}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card: Template CSV para Importação em Lote */}
+          <Card className="border-slate-200 bg-white shadow-xs">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                Template CSV para Cadastro de Livros
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Baixe o modelo oficial em formato CSV com cabeçalhos pré-formatados e exemplos prontos para preenchimento.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-slate-900">
+                    Arquivo Modelo de Importação (template_cadastro_livros_cep.csv)
+                  </p>
+                  <p className="text-[11px] text-slate-500 leading-relaxed max-w-xl">
+                    Contém as colunas: <code className="bg-slate-200/80 px-1 py-0.5 rounded text-[10px] font-mono">isbn;titulo;autor_espiritual;autor_mediunico;autor;editora;ano_publicacao;categoria;sinopse;exemplares;localizacao</code> com codificação UTF-8 pronta para Excel.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={handleDownloadTemplateCsv}
+                  variant="outline"
+                  size="sm"
+                  className="bg-white hover:bg-emerald-50 border-emerald-600/40 text-emerald-700 hover:text-emerald-800 text-xs font-medium gap-2 shrink-0 shadow-2xs"
+                >
+                  <Download className="w-4 h-4" />
+                  Baixar Template CSV
+                </Button>
               </div>
             </CardContent>
           </Card>

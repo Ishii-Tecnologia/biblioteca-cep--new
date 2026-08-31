@@ -39,8 +39,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { BookFormModal } from '@/components/BookFormModal'
-import { BarcodeScannerModal } from '@/components/BarcodeScannerModal'
-import { BookMetadata } from '@/services/isbn'
 import { CopiesModal } from '@/components/CopiesModal'
 import { LoanModal } from '@/components/LoanModal'
 import { ReserveModal } from '@/components/ReserveModal'
@@ -128,7 +126,6 @@ export default function Acervo() {
   // Modals state
   const [bookModalOpen, setBookModalOpen] = useState(false)
   const [bookToEdit, setBookToEdit] = useState<Titulo | null>(null)
-  const [barcodeModalOpen, setBarcodeModalOpen] = useState(false)
   const [csvImportModalOpen, setCsvImportModalOpen] = useState(false)
 
   // Lightbox Zoom modal state (F-05)
@@ -198,30 +195,24 @@ export default function Acervo() {
     setBookModalOpen(true)
   }
 
-  const handleBookScannedDirectly = (book: BookMetadata) => {
-    setBookToEdit({
-      id_titulo: '',
-      titulo_de_livro: book.titulo_de_livro,
-      autor: book.autor,
-      autor_espiritual: book.autor_espiritual || null,
-      autor_mediunico: book.autor_mediunico || null,
-      author_id: null,
-      editora: book.editora || null,
-      ano_publicacao: book.ano_publicacao || null,
-      isbn: book.isbn || null,
-      categoria: book.categoria || 'Geral',
-      sinopse: book.sinopse || null,
-      vol: 0,
-      capa_url: book.capa_url || null,
-      ativo: true,
-      created_at: new Date().toISOString(),
-    })
-    setBookModalOpen(true)
-  }
-
   const handleOpenCopies = (book: TituloWithStats) => {
     setSelectedBookForCopies(book)
     setCopiesModalOpen(true)
+  }
+
+  const handleOpenLoan = async (book: TituloWithStats) => {
+    try {
+      const copies = await ExemplaresService.getByTitulo(book.id_titulo)
+      const availableCopy = copies.find((c: any) => c.status === 'Disponivel')
+      if (availableCopy) {
+        setPreSelectedExemplar(availableCopy.id_exemplar)
+      } else {
+        setPreSelectedExemplar('')
+      }
+    } catch {
+      setPreSelectedExemplar('')
+    }
+    setLoanModalOpen(true)
   }
 
   const handleOpenLightbox = (book: TituloWithStats) => {
@@ -289,14 +280,6 @@ export default function Acervo() {
             >
               <UploadCloud className="w-4 h-4" />
               Importar CSV
-            </Button>
-            <Button
-              onClick={() => setBarcodeModalOpen(true)}
-              variant="outline"
-              className="border-emerald-600 text-emerald-700 hover:bg-emerald-50 font-medium gap-2 shadow-xs"
-            >
-              <Search className="w-4 h-4" />
-              Ler Código de Barras
             </Button>
             <Button
               onClick={handleNewBook}
@@ -591,7 +574,7 @@ export default function Acervo() {
                         <Button
                           size="sm"
                           className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium gap-1"
-                          onClick={() => handleOpenCopies(book)}
+                          onClick={() => handleOpenLoan(book)}
                         >
                           <Repeat className="w-3.5 h-3.5" />
                           Emprestar
@@ -662,15 +645,6 @@ export default function Acervo() {
         bookToEdit={bookToEdit}
         onSuccess={loadBooks}
         categories={categories}
-      />
-
-      <BarcodeScannerModal
-        open={barcodeModalOpen}
-        onOpenChange={setBarcodeModalOpen}
-        onBookFound={(meta) => {
-          handleBookScannedDirectly(meta)
-          setBarcodeModalOpen(false)
-        }}
       />
 
       <CsvImportModal
