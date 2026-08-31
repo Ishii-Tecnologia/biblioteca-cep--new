@@ -385,21 +385,7 @@ export default function Acervo() {
             </CardContent>
           </Card>
 
-          <Card
-            className={`border-slate-200 shadow-2xs bg-white col-span-2 sm:col-span-1 cursor-pointer transition-all hover:border-rose-300 hover:shadow-xs ${
-              selectedStatus === 'Manutencao' || selectedStatus === 'manutencao'
-                ? 'ring-2 ring-rose-500 border-rose-400 bg-rose-50/20'
-                : ''
-            }`}
-            onClick={() => {
-              const newStatus =
-                selectedStatus === 'Manutencao' || selectedStatus === 'manutencao'
-                  ? 'all'
-                  : 'Manutencao'
-              handleStatusChange(newStatus)
-            }}
-            title="Clique para filtrar apenas exemplares em manutenção"
-          >
+          <Card className="border-slate-200 shadow-2xs bg-white col-span-2 sm:col-span-1">
             <CardContent className="p-3.5 flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600 border border-rose-100">
                 <Wrench className="w-5 h-5" />
@@ -612,9 +598,47 @@ export default function Acervo() {
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <h2 className="font-bold text-slate-900 text-base leading-snug group-hover:text-emerald-700 transition-colors line-clamp-2">
-                        {book.titulo_de_livro}
-                      </h2>
+                      <div className="flex items-start gap-1.5">
+                        {isAdmin && (
+                          <TooltipProvider delayDuration={150}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-rose-500 hover:text-rose-700 hover:bg-rose-50 shrink-0 -mt-0.5"
+                                    disabled={
+                                      book.total_exemplares > 0 &&
+                                      book.exemplares_disponiveis !== book.total_exemplares
+                                    }
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (
+                                        book.total_exemplares === 0 ||
+                                        book.exemplares_disponiveis === book.total_exemplares
+                                      ) {
+                                        handleDeleteBook(book.id_titulo, book.titulo_de_livro)
+                                      }
+                                    }}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                {book.total_exemplares > 0 &&
+                                book.exemplares_disponiveis !== book.total_exemplares
+                                  ? 'Só é possível excluir quando todos os exemplares estiverem disponíveis'
+                                  : `Excluir "${book.titulo_de_livro}" do acervo`}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                        <h2 className="font-bold text-slate-900 text-base leading-snug group-hover:text-emerald-700 transition-colors line-clamp-2">
+                          {book.titulo_de_livro}
+                        </h2>
+                      </div>
 
                       {/* Exibição formatada do Autor / Espírito / Médium (F-04) */}
                       <p className="text-xs font-semibold text-slate-700 mt-1 flex items-center gap-1 flex-wrap">
@@ -737,18 +761,6 @@ export default function Acervo() {
                         title="Editar livro"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
-                      </Button>
-                    )}
-
-                    {isAdmin && (
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 text-rose-500 hover:text-rose-700 hover:bg-rose-50"
-                        onClick={() => handleDeleteBook(book.id_titulo, book.titulo_de_livro)}
-                        title="Excluir livro do acervo"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     )}
                   </div>
