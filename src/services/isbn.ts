@@ -156,43 +156,102 @@ export async function fetchBookByIsbn(isbnRaw: string): Promise<BookMetadata> {
   }
   const cleanIsbn = validation.isbn13
 
-  // 1. Tenta Google Books API
+  // 1. Tenta BrasilAPI como fonte prioritária (especialmente eficaz para livros nacionais)
   try {
-    const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`)
+    const res = await fetch(`https://brasilapi.com.br/api/isbn/v1/${cleanIsbn}`)
     if (res.ok) {
       const data = await res.json()
-      if (data.items && data.items.length > 0) {
-        const volume = data.items[0].volumeInfo || {}
-        const authors = volume.authors && volume.authors.length > 0 ? volume.authors.join(', ') : ''
-        const publishedYear = volume.publishedDate
-          ? parseInt(volume.publishedDate.substring(0, 4), 10)
-          : undefined
+      if (data && (data.title || data.isbn)) {
+        let authors = ''
+        if (Array.isArray(data.authors)) {
+          authors = data.authors.filter(Boolean).join(', ')
+        } else if (typeof data.authors === 'string') {
+          authors = data.authors
+        }
 
-        let cover = volume.imageLinks?.thumbnail || volume.imageLinks?.smallThumbnail
+        let year: number | undefined
+        if (data.year) {
+          const parsed = typeof data.year === 'number' ? data.year : parseInt(String(data.year), 10)
+          if (!isNaN(parsed)) {
+            year = parsed
+          }
+        }
+
+        let cover = data.cover_url || ''
         if (cover && cover.startsWith('http:')) {
           cover = cover.replace('http:', 'https:')
         }
 
-        const categories =
-          volume.categories && volume.categories.length > 0 ? volume.categories[0] : ''
-
         return {
           isbn: cleanIsbn,
-          titulo_de_livro: volume.title || '',
+          titulo_de_livro: data.title || '',
           autor: authors || '',
-          editora: volume.publisher || '',
-          ano_publicacao: publishedYear && !isNaN(publishedYear) ? publishedYear : undefined,
-          categoria: categories || '',
-          sinopse: volume.description || '',
+          editora: data.publisher || '',
+          ano_publicacao: year,
+          categoria: '',
+          sinopse: data.synopsis || '',
           capa_url: cover || '',
         }
+      }
+    }
+  } catch (err) {
+    console.warn('Erro ao consultar BrasilAPI:', err)
+  }
+
+  // 2. Fallback: Google Books API (com busca filtrada isbn: e fallback por termo simples q=)
+  try {
+    let volume: any = null
+    const resFiltered = await fetch(
+      `https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`,
+    )
+    if (resFiltered.ok) {
+      const data = await resFiltered.json()
+      if (data.items && data.items.length > 0) {
+        volume = data.items[0].volumeInfo || {}
+      }
+    }
+
+    // Se não encontrou com busca filtrada, tenta busca simples
+    if (!volume) {
+      const resSimple = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${cleanIsbn}`)
+      if (resSimple.ok) {
+        const data = await resSimple.json()
+        if (data.items && data.items.length > 0) {
+          volume = data.items[0].volumeInfo || {}
+        }
+      }
+    }
+
+    if (volume && (volume.title || volume.authors)) {
+      const authors = volume.authors && volume.authors.length > 0 ? volume.authors.join(', ') : ''
+      const publishedYear = volume.publishedDate
+        ? parseInt(volume.publishedDate.substring(0, 4), 10)
+        : undefined
+
+      let cover = volume.imageLinks?.thumbnail || volume.imageLinks?.smallThumbnail
+      if (cover && cover.startsWith('http:')) {
+        cover = cover.replace('http:', 'https:')
+      }
+
+      const categories =
+        volume.categories && volume.categories.length > 0 ? volume.categories[0] : ''
+
+      return {
+        isbn: cleanIsbn,
+        titulo_de_livro: volume.title || '',
+        autor: authors || '',
+        editora: volume.publisher || '',
+        ano_publicacao: publishedYear && !isNaN(publishedYear) ? publishedYear : undefined,
+        categoria: categories || '',
+        sinopse: volume.description || '',
+        capa_url: cover || '',
       }
     }
   } catch (err) {
     console.warn('Erro ao consultar Google Books:', err)
   }
 
-  // 2. Fallback: Open Library API
+  // 3. Fallback: Open Library API
   try {
     const res = await fetch(`https://openlibrary.org/isbn/${cleanIsbn}.json`)
     if (res.ok) {
