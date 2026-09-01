@@ -217,33 +217,6 @@ export default function Layout({ children }: LayoutProps) {
               })}
             </nav>
 
-            {/* Contadores nos cabeçalhos (F-02) */}
-            <div className="hidden lg:flex items-center gap-2 border-l border-slate-200 pl-4">
-              <Link
-                to="/emprestimos"
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition-colors"
-                title="Empréstimos ativos na biblioteca"
-              >
-                <Repeat className="w-3.5 h-3.5 text-blue-600" />
-                <span>
-                  <strong className="text-slate-900 font-bold">{emprestimosAtivos}</strong>{' '}
-                  empréstimo(s) ativo(s)
-                </span>
-              </Link>
-
-              <Link
-                to="/reservas"
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition-colors"
-                title="Reservas ativas pendentes"
-              >
-                <BookmarkCheck className="w-3.5 h-3.5 text-amber-600" />
-                <span>
-                  <strong className="text-slate-900 font-bold">{reservasAtivas}</strong> reserva(s)
-                  pendente(s)
-                </span>
-              </Link>
-            </div>
-
             {/* Right actions: User menu or login */}
             <div className="flex items-center gap-3">
               {user ? (
@@ -537,18 +510,6 @@ export default function Layout({ children }: LayoutProps) {
                 </Button>
               </div>
             )}
-
-            {/* Badges de Contadores Ativos */}
-            <div className="flex items-center gap-2 py-1 border-b border-slate-100">
-              <Badge variant="outline" className="text-xs bg-slate-50 gap-1 text-slate-700">
-                <Repeat className="w-3 h-3 text-blue-600" />
-                {emprestimosAtivos} ativo(s)
-              </Badge>
-              <Badge variant="outline" className="text-xs bg-slate-50 gap-1 text-slate-700">
-                <BookmarkCheck className="w-3 h-3 text-amber-600" />
-                {reservasAtivas} reserva(s)
-              </Badge>
-            </div>
 
             {/* Links de navegação */}
             <div className="space-y-1">

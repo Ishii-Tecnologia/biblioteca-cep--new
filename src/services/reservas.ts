@@ -11,6 +11,14 @@ export interface ReservaDetailed {
   data_reserva: string
   status_reserva: 'Ativa' | 'Atendida' | 'Cancelada'
   data_atendimento: string | null
+  posicao_fila?: number
+  total_fila?: number
+  historico_evento?: {
+    tipo: string
+    descricao: string
+    created_at: string
+    observacao?: string | null
+  } | null
   titulo?: {
     titulo_de_livro: string
     autor: string
@@ -52,7 +60,7 @@ export const ReservasService = {
 
     const { data, error } = await query
     if (error) throw error
-    return (data || []) as unknown as ReservaDetailed[]
+    return ReservasService.enrichReservations((data || []) as unknown as ReservaDetailed[])
   },
 
   /**
@@ -85,7 +93,100 @@ export const ReservasService = {
 
     const { data, error } = await query
     if (error) throw error
-    return (data || []) as unknown as ReservaDetailed[]
+    return ReservasService.enrichReservations((data || []) as unknown as ReservaDetailed[])
+  },
+
+  /**
+   * Enriquece as reservas com posição na fila e histórico do evento de atendimento/criação
+   */
+  async enrichReservations(items: ReservaDetailed[]): Promise<ReservaDetailed[]> {
+    if (!items || items.length === 0) return []
+
+    // 1. Obter todas as reservas ativas de todos os títulos para calcular posição na fila precisa
+    const uniqueTitulos = Array.from(new Set(items.map((i) => i.id_titulo)))
+    let activeQueueByTitulo: Record<string, { id_reserva: number; data_reserva: string }[]> = {}
+
+    if (uniqueTitulos.length > 0) {
+      const { data: allActive } = await supabase
+        .from('reserva')
+        .select('id_reserva, id_titulo, data_reserva')
+        .in('id_titulo', uniqueTitulos)
+        .eq('status_reserva', 'Ativa')
+        .order('data_reserva', { ascending: true })
+
+      if (allActive) {
+        for (const act of allActive) {
+          if (!activeQueueByTitulo[act.id_titulo]) {
+            activeQueueByTitulo[act.id_titulo] = []
+          }
+          activeQueueByTitulo[act.id_titulo].push({
+            id_reserva: act.id_reserva,
+            data_reserva: act.data_reserva,
+          })
+        }
+      }
+    }
+
+    // 2. Buscar histórico relacionado para reservas atendidas/canceladas
+    const reservaIds = items.map((i) => i.id_reserva)
+    const historicoMap: Record<
+      number,
+      { tipo: string; descricao: string; created_at: string; observacao?: string | null }
+    > = {}
+
+    if (reservaIds.length > 0) {
+      // Buscar logs de histórico que contenham 'Reserva' no tipo
+      const { data: logs } = await supabase
+        .from('historico')
+        .select('id, tipo, descricao, created_at, observacao')
+        .ilike('tipo', 'Reserva%')
+        .order('created_at', { ascending: false })
+        .limit(200)
+
+      if (logs) {
+        for (const log of logs) {
+          // Extrair número da reserva se existir no texto, ex: "Reserva #9 atendida..."
+          const match = log.descricao?.match(/Reserva #(\d+)/i)
+          if (match && match[1]) {
+            const resId = parseInt(match[1], 10)
+            if (!historicoMap[resId]) {
+              historicoMap[resId] = {
+                tipo: log.tipo,
+                descricao: log.descricao,
+                created_at: log.created_at,
+                observacao: log.observacao,
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return items.map((res) => {
+      let posicao_fila: number | undefined
+      let total_fila: number | undefined
+
+      if (res.status_reserva === 'Ativa') {
+        const queue = activeQueueByTitulo[res.id_titulo] || []
+        const idx = queue.findIndex((q) => q.id_reserva === res.id_reserva)
+        if (idx !== -1) {
+          posicao_fila = idx + 1
+          total_fila = queue.length
+        } else {
+          posicao_fila = 1
+          total_fila = 1
+        }
+      }
+
+      const historico_evento = historicoMap[res.id_reserva] || null
+
+      return {
+        ...res,
+        posicao_fila,
+        total_fila,
+        historico_evento,
+      }
+    })
   },
 
   /**

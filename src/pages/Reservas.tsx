@@ -274,7 +274,16 @@ export default function Reservas() {
                       {res.status_reserva === 'Ativa' && (
                         <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 gap-1 select-none pointer-events-none">
                           <Clock className="w-3 h-3 text-amber-600" />
-                          Aguardando Disponibilidade
+                          {res.posicao_fila ? (
+                            <span>
+                              {res.posicao_fila}º lugar na fila
+                              {res.total_fila && res.total_fila > 1
+                                ? ` (de ${res.total_fila})`
+                                : ''}
+                            </span>
+                          ) : (
+                            'Aguardando Disponibilidade'
+                          )}
                         </span>
                       )}
                       {res.status_reserva === 'Atendida' && (
@@ -289,6 +298,54 @@ export default function Reservas() {
                         </span>
                       )}
                     </div>
+
+                    {/* Bloco de Histórico / Acompanhamento da Fila e Atendimento */}
+                    {res.status_reserva === 'Ativa' && (
+                      <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-2.5 text-xs text-amber-900 flex items-start gap-2.5 mt-1">
+                        <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="font-semibold text-amber-950">
+                            {res.posicao_fila === 1
+                              ? 'Você é o próximo na fila de espera!'
+                              : `Posição na fila: ${res.posicao_fila}º lugar`}
+                          </p>
+                          <p className="text-[11px] text-amber-800 leading-relaxed">
+                            Assim que um exemplar for devolvido, a equipe da biblioteca atenderá sua
+                            reserva e gerará seu empréstimo.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {res.status_reserva === 'Atendida' && (
+                      <div className="bg-emerald-50/80 border border-emerald-200/90 rounded-lg p-2.5 text-xs text-emerald-900 flex items-start gap-2.5 mt-1">
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="font-semibold text-emerald-950">
+                            Histórico do Atendimento:{' '}
+                            <span className="font-normal text-emerald-800">
+                              Reserva atendida em {formatDate(res.data_atendimento)}
+                            </span>
+                          </p>
+                          <p className="text-[11px] text-emerald-800 leading-relaxed">
+                            {res.historico_evento?.descricao ||
+                              `A reserva #${res.id_reserva} foi atendida com sucesso e convertida em empréstimo para retirada na biblioteca.`}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {res.status_reserva === 'Cancelada' && res.historico_evento && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-700 flex items-start gap-2.5 mt-1">
+                        <XCircle className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                          <p className="font-semibold text-slate-900">Histórico da Solicitação:</p>
+                          <p className="text-[11px] text-slate-600 leading-relaxed">
+                            {res.historico_evento.descricao}
+                          </p>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                       <div className="flex items-start gap-2">
