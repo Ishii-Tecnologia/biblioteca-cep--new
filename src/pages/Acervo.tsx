@@ -45,7 +45,9 @@ import { LoanModal } from '@/components/LoanModal'
 import { ReserveModal } from '@/components/ReserveModal'
 import { CsvImportModal } from '@/components/CsvImportModal'
 import { BookCoverLightboxModal } from '@/components/BookCoverLightboxModal'
+import { BarcodeScannerModal } from '@/components/BarcodeScannerModal'
 import { ConfirmModal } from '@/components/ConfirmModal'
+import { Barcode, Camera } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useHeaderCounters } from '@/hooks/use-header-counters'
 
@@ -129,6 +131,7 @@ export default function Acervo() {
   // Modals state
   const [bookModalOpen, setBookModalOpen] = useState(false)
   const [bookToEdit, setBookToEdit] = useState<Titulo | null>(null)
+  const [barcodeSearchOpen, setBarcodeSearchOpen] = useState(false)
   const [csvImportModalOpen, setCsvImportModalOpen] = useState(false)
 
   // Lightbox Zoom modal state (F-05)
@@ -305,25 +308,39 @@ export default function Acervo() {
           </p>
         </div>
 
-        {isOperadorOrAdmin && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              onClick={() => setCsvImportModalOpen(true)}
-              variant="outline"
-              className="border-primary/40 text-primary hover:bg-primary/10 font-medium gap-2 shadow-xs"
-            >
-              <UploadCloud className="w-4 h-4" />
-              Importar CSV
-            </Button>
-            <Button
-              onClick={handleNewBook}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium gap-2 shadow-sm"
-            >
-              <PlusCircle className="w-4 h-4" />
-              Cadastrar Novo Livro
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Botão de Leitura de Código de Barras / Câmera */}
+          <Button
+            onClick={() => setBarcodeSearchOpen(true)}
+            variant="outline"
+            className="border-emerald-600/50 text-emerald-700 hover:bg-emerald-50 font-medium gap-1.5 shadow-xs text-xs sm:text-sm"
+            title="Escanear código de barras pela câmera do celular para localizar ou cadastrar livro"
+          >
+            <Barcode className="w-4 h-4 text-emerald-600" />
+            <span className="hidden xs:inline">Escanear</span> Código de Barras
+          </Button>
+
+          {isOperadorOrAdmin && (
+            <>
+              <Button
+                onClick={() => setCsvImportModalOpen(true)}
+                variant="outline"
+                className="border-primary/40 text-primary hover:bg-primary/10 font-medium gap-2 shadow-xs text-xs sm:text-sm"
+              >
+                <UploadCloud className="w-4 h-4" />
+                <span className="hidden sm:inline">Importar CSV</span>
+                <span className="sm:hidden">CSV</span>
+              </Button>
+              <Button
+                onClick={handleNewBook}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium gap-2 shadow-sm text-xs sm:text-sm"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Novo Livro</span>
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Painel de Totais (F-10) */}
@@ -774,10 +791,28 @@ export default function Acervo() {
       {/* Modals */}
       <BookFormModal
         isOpen={bookModalOpen}
-        onClose={() => setBookModalOpen(false)}
+        onClose={() => {
+          setBookModalOpen(false)
+          setBookToEdit(null)
+        }}
         bookToEdit={bookToEdit}
         onSuccess={loadBooks}
         categories={categories}
+      />
+
+      <BarcodeScannerModal
+        open={barcodeSearchOpen}
+        onOpenChange={setBarcodeSearchOpen}
+        onBookFound={(book) => {
+          // Quando encontrado, preenche busca ou se operador abre cadastro
+          setSearchQuery(book.isbn || book.titulo_de_livro)
+          updateFiltersUrl(book.isbn || book.titulo_de_livro, undefined, undefined)
+          loadBooks()
+          toast({
+            title: 'ISBN Localizado',
+            description: `Buscando "${book.titulo_de_livro}" no acervo...`,
+          })
+        }}
       />
 
       <CsvImportModal

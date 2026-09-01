@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 import { useHeaderCounters } from '@/hooks/use-header-counters'
 import { ReservasService, ReservaDetailed } from '@/services/reservas'
@@ -23,13 +24,18 @@ import { useToast } from '@/hooks/use-toast'
 import { formatDate } from '@/lib/utils'
 
 export default function Reservas() {
-  const { isOperadorOrAdmin } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialStatus = searchParams.get('status') || 'Ativa'
+  const filterMinhas = searchParams.get('minhas') === 'true'
+
+  const { isOperadorOrAdmin, user, profile } = useAuth()
   const { toast } = useToast()
   const { refreshCounters } = useHeaderCounters()
 
   const [reservas, setReservas] = useState<ReservaDetailed[]>([])
   const [loading, setLoading] = useState(true)
-  const [statusTab, setStatusTab] = useState<string>('Ativa')
+  const [statusTab, setStatusTab] = useState<string>(initialStatus)
+  const [onlyMyReservas, setOnlyMyReservas] = useState<boolean>(filterMinhas || !isOperadorOrAdmin)
   const [reserveModalOpen, setReserveModalOpen] = useState(false)
   const [actionLoadingId, setActionLoadingId] = useState<number | null>(null)
 
@@ -43,7 +49,22 @@ export default function Reservas() {
   const loadReservas = async () => {
     setLoading(true)
     try {
-      const data = await ReservasService.getAll(statusTab)
+      let data: ReservaDetailed[] = []
+      if (!isOperadorOrAdmin || onlyMyReservas) {
+        if (profile?.id_leitor) {
+          data = await ReservasService.getByLeitor(profile.id_leitor, statusTab)
+        } else {
+          // Fallback: carregar todas e filtrar por email/id_auth
+          const all = await ReservasService.getAll(statusTab)
+          data = all.filter(
+            (r) =>
+              r.leitor?.email?.toLowerCase() === user?.email?.toLowerCase() ||
+              (profile?.id_leitor && r.id_leitor === profile.id_leitor),
+          )
+        }
+      } else {
+        data = await ReservasService.getAll(statusTab)
+      }
       setReservas(data)
       refreshCounters()
     } catch (err: any) {
@@ -58,8 +79,19 @@ export default function Reservas() {
   }
 
   useEffect(() => {
+    const s = searchParams.get('status')
+    if (s && s !== statusTab) {
+      setStatusTab(s)
+    }
+    const m = searchParams.get('minhas') === 'true'
+    if (m !== onlyMyReservas) {
+      setOnlyMyReservas(m || !isOperadorOrAdmin)
+    }
+  }, [searchParams])
+
+  useEffect(() => {
     loadReservas()
-  }, [statusTab])
+  }, [statusTab, onlyMyReservas, profile?.id_leitor, isOperadorOrAdmin])
 
   const handleFulfill = (res: ReservaDetailed) => {
     setReservaToFulfill(res)
@@ -142,23 +174,71 @@ export default function Reservas() {
         </Button>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={statusTab} onValueChange={setStatusTab} className="w-full">
-        <TabsList className="grid grid-cols-4 w-full sm:w-96 bg-slate-100 p-1">
-          <TabsTrigger value="Ativa" className="text-xs font-semibold">
-            Ativas na Fila
-          </TabsTrigger>
-          <TabsTrigger value="Atendida" className="text-xs font-semibold">
-            Atendidas
-          </TabsTrigger>
-          <TabsTrigger value="Cancelada" className="text-xs font-semibold">
-            Canceladas
-          </TabsTrigger>
-          <TabsTrigger value="all" className="text-xs font-semibold">
-            Todas
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {/* Tabs and Filter */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <Tabs
+          value={statusTab}
+          onValueChange={(val) => {
+            setStatusTab(val)
+            const nextParams = new URLSearchParams(searchParams)
+            nextParams.set('status', val)
+            setSearchParams(nextParams)
+          }}
+          className="w-full sm:w-auto"
+        >
+          <TabsList className="grid grid-cols-4 w-full sm:w-96 bg-slate-100 p-1">
+            <TabsTrigger value="Ativa" className="text-xs font-semibold">
+              Ativas na Fila
+            </TabsTrigger>
+            <TabsTrigger value="Atendida" className="text-xs font-semibold">
+              Atendidas
+            </TabsTrigger>
+            <TabsTrigger value="Cancelada" className="text-xs font-semibold">
+              Canceladas
+            </TabsTrigger>
+            <TabsTrigger value="all" className="text-xs font-semibold">
+              Todas
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {isOperadorOrAdmin && (
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <Button
+              size="sm"
+              variant={onlyMyReservas ? 'default' : 'outline'}
+              onClick={() => {
+                const next = !onlyMyReservas
+                setOnlyMyReservas(next)
+                const nextParams = new URLSearchParams(searchParams)
+                if (next) nextParams.set('minhas', 'true')
+                else nextParams.delete('minhas')
+                setSearchParams(nextParams)
+              }}
+              className={`h-8 text-xs ${
+                onlyMyReservas
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'text-slate-600 border-slate-200'
+              }`}
+            >
+              <User className="w-3.5 h-3.5 mr-1" />
+              {onlyMyReservas ? 'Exibindo: Minhas Reservas' : 'Filtrar Minhas Reservas'}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {!isOperadorOrAdmin && (
+        <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              Você está acompanhando a fila de espera das suas reservas ativas. Quando um exemplar
+              for devolvido, a equipe da biblioteca atualizará seu pedido.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* List of reservations */}
       {loading ? (

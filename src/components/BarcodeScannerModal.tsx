@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -20,9 +20,12 @@ import {
   AlertCircle,
   Keyboard,
   Sparkles,
+  SwitchCamera,
+  CheckCircle2,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { fetchBookByIsbn, BookMetadata, sanitizeIsbn } from '@/services/isbn'
+import { scanCanvasForBarcode } from '@/lib/barcode-decoder'
 
 interface BarcodeScannerModalProps {
   open: boolean
@@ -33,166 +36,299 @@ interface BarcodeScannerModalProps {
 export function BarcodeScannerModal({ open, onOpenChange, onBookFound }: BarcodeScannerModalProps) {
   const { toast } = useToast()
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const animationFrameId = useRef<number | null>(null)
+  const isScanningRef = useRef<boolean>(false)
+  const handledCodeRef = useRef<string | null>(null)
 
   const [mode, setMode] = useState<'camera' | 'manual'>('camera')
   const [cameraError, setCameraError] = useState<string | null>(null)
-  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null)
   const [manualIsbn, setManualIsbn] = useState('')
   const [searching, setSearching] = useState(false)
   const [scanningActive, setScanningActive] = useState(false)
   const [detectedCode, setDetectedCode] = useState<string | null>(null)
-  const [hasNativeBarcode, setHasNativeBarcode] = useState(false)
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment')
+  const [isSecureContext, setIsSecureContext] = useState<boolean>(true)
 
-  // Stop camera stream safely
-  const stopCamera = () => {
+  // Safe stop for camera & animation frames
+  const stopCamera = useCallback(() => {
+    isScanningRef.current = false
     if (animationFrameId.current) {
       cancelAnimationFrame(animationFrameId.current)
       animationFrameId.current = null
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => {
-        track.stop()
-      })
+      try {
+        streamRef.current.getTracks().forEach((track) => {
+          track.stop()
+        })
+      } catch (err) {
+        console.warn('Erro ao parar tracks da câmera:', err)
+      }
       streamRef.current = null
     }
     if (videoRef.current) {
       videoRef.current.srcObject = null
     }
     setScanningActive(false)
-  }
+  }, [])
 
-  // Lookup ISBN book data
-  const handleLookup = async (code: string) => {
-    const clean = sanitizeIsbn(code)
-    if (!clean) {
-      toast({
-        title: 'Código inválido',
-        description: 'Digite ou escaneie um código de barras / ISBN numérico.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    setSearching(true)
-    try {
-      const bookData = await fetchBookByIsbn(clean)
-      toast({
-        title: 'Livro encontrado!',
-        description: `"${bookData.titulo_de_livro}" preenchido automaticamente.`,
-      })
-      stopCamera()
-      onBookFound(bookData)
-      onOpenChange(false)
-    } catch (err: any) {
-      toast({
-        title: 'Não foi possível obter dados',
-        description: err.message || 'Livro não localizado pelo ISBN.',
-        variant: 'destructive',
-      })
-    } finally {
-      setSearching(false)
-    }
-  }
-
-  // Start Camera
-  const startCamera = async () => {
-    stopCamera()
-    setCameraError(null)
-    setDetectedCode(null)
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setCameraError('Seu navegador não possui suporte para acesso à câmera.')
-      setHasCameraPermission(false)
-      setMode('manual')
-      return
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      })
-
-      streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play().catch(() => {})
+  // Process found ISBN / barcode
+  const handleLookup = useCallback(
+    async (code: string) => {
+      const clean = sanitizeIsbn(code)
+      if (!clean) {
+        toast({
+          title: 'Código inválido',
+          description: 'Digite ou escaneie um código de barras / ISBN numérico válido.',
+          variant: 'destructive',
+        })
+        return
       }
-      setHasCameraPermission(true)
-      setScanningActive(true)
 
-      // Start BarcodeDetector loop if supported
-      initBarcodeDetector()
-    } catch (err: any) {
-      console.warn('Erro ao acessar a câmera:', err)
-      let message = 'Não foi possível acessar a câmera do dispositivo.'
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        message = 'Acesso à câmera foi recusado pelo usuário ou bloqueado no navegador.'
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        message = 'Nenhuma câmera encontrada neste dispositivo.'
+      setSearching(true)
+      try {
+        const bookData = await fetchBookByIsbn(clean)
+        toast({
+          title: 'Livro encontrado!',
+          description: `"${bookData.titulo_de_livro}" preenchido automaticamente.`,
+        })
+        stopCamera()
+        onBookFound(bookData)
+        onOpenChange(false)
+      } catch (err: any) {
+        toast({
+          title: 'Não foi possível obter dados automaticamente',
+          description:
+            err.message ||
+            'Obra não localizada pelo ISBN nas bases públicas. Você pode preencher os dados manualmente.',
+          variant: 'destructive',
+        })
+      } finally {
+        setSearching(false)
       }
-      setCameraError(message)
-      setHasCameraPermission(false)
-      setMode('manual')
-    }
-  }
+    },
+    [onBookFound, onOpenChange, stopCamera, toast],
+  )
 
-  // Barcode detection using standard Web API BarcodeDetector (Chrome/Android/Safari iOS 17+)
-  const initBarcodeDetector = () => {
+  // Detection loop with BarcodeDetector and fallback canvas decoder
+  const startDetectionLoop = useCallback(() => {
     const BarcodeDetectorClass = (window as any).BarcodeDetector
+    let nativeDetector: any = null
 
     if (BarcodeDetectorClass) {
-      setHasNativeBarcode(true)
       try {
-        const barcodeDetector = new BarcodeDetectorClass({
-          formats: ['ean_13', 'ean_8', 'isbn', 'code_128', 'qr_code', 'upc_a', 'upc_e'],
+        nativeDetector = new BarcodeDetectorClass({
+          formats: ['ean_13', 'ean_8', 'isbn', 'upc_a', 'upc_e', 'code_128', 'qr_code'],
         })
+      } catch (e) {
+        console.warn('BarcodeDetector constructor warning:', e)
+      }
+    }
 
-        const detectFrame = async () => {
-          if (!videoRef.current || videoRef.current.readyState < 2) {
-            animationFrameId.current = requestAnimationFrame(detectFrame)
-            return
-          }
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement('canvas')
+    }
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
 
-          try {
-            const barcodes = await barcodeDetector.detect(videoRef.current)
-            if (barcodes && barcodes.length > 0) {
-              const rawValue = barcodes[0].rawValue || ''
-              const clean = sanitizeIsbn(rawValue)
-              if (clean && (clean.length === 10 || clean.length === 13)) {
-                setDetectedCode(clean)
-                stopCamera()
-                handleLookup(clean)
-                return
+    isScanningRef.current = true
+    handledCodeRef.current = null
+    let lastScanTime = 0
+
+    const detectLoop = async (timestamp: number) => {
+      if (!isScanningRef.current || !videoRef.current) return
+
+      const video = videoRef.current
+
+      // Verify video is ready with valid dimensions
+      if (
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+        video.videoWidth > 0 &&
+        video.videoHeight > 0
+      ) {
+        // Run scan at maximum 10-15 fps to avoid overheating mobile CPU
+        if (timestamp - lastScanTime > 80 && !handledCodeRef.current) {
+          lastScanTime = timestamp
+
+          // 1. Try native BarcodeDetector first
+          if (nativeDetector) {
+            try {
+              const barcodes = await nativeDetector.detect(video)
+              if (barcodes && barcodes.length > 0) {
+                for (const bc of barcodes) {
+                  const raw = bc.rawValue || ''
+                  const clean = sanitizeIsbn(raw)
+                  if (clean && (clean.length === 10 || clean.length === 13 || clean.length === 8)) {
+                    handledCodeRef.current = clean
+                    setDetectedCode(clean)
+                    stopCamera()
+                    await handleLookup(clean)
+                    return
+                  }
+                }
               }
+            } catch {
+              // Frame detection error, continue next frame
             }
-          } catch {
-            // Frame detection error, continue next frame
           }
 
-          animationFrameId.current = requestAnimationFrame(detectFrame)
+          // 2. Fallback to canvas sampling decoder if native didn't match or isn't supported
+          if (!handledCodeRef.current && ctx) {
+            try {
+              canvas.width = Math.min(video.videoWidth, 640)
+              canvas.height = Math.min(video.videoHeight, 480)
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+              const decoded = scanCanvasForBarcode(ctx, canvas.width, canvas.height)
+              if (decoded) {
+                const clean = sanitizeIsbn(decoded)
+                if (clean) {
+                  handledCodeRef.current = clean
+                  setDetectedCode(clean)
+                  stopCamera()
+                  await handleLookup(clean)
+                  return
+                }
+              }
+            } catch {
+              // Canvas processing error, continue loop
+            }
+          }
+        }
+      }
+
+      if (isScanningRef.current) {
+        animationFrameId.current = requestAnimationFrame(detectLoop)
+      }
+    }
+
+    animationFrameId.current = requestAnimationFrame(detectLoop)
+  }, [handleLookup, stopCamera])
+
+  // Start Camera with resilient fallback constraints
+  const startCamera = useCallback(
+    async (preferredFacing: 'environment' | 'user' = facingMode) => {
+      stopCamera()
+      setCameraError(null)
+      setDetectedCode(null)
+      handledCodeRef.current = null
+
+      // Check for HTTPS / secure context
+      const isSecure = window.isSecureContext || window.location.hostname === 'localhost'
+      setIsSecureContext(isSecure)
+      if (!isSecure) {
+        setCameraError(
+          'O acesso à câmera pelo navegador exige conexão segura (HTTPS). Utilize a busca manual de ISBN.',
+        )
+        setMode('manual')
+        return
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setCameraError(
+          'Seu navegador não possui suporte à API de câmera. Utilize o modo de digitação manual.',
+        )
+        setMode('manual')
+        return
+      }
+
+      // Progressive constraint strategy for maximum mobile compatibility
+      const constraintOptions: MediaStreamConstraints[] = [
+        // 1. High-res rear camera with focus mode
+        {
+          video: {
+            facingMode: { ideal: preferredFacing },
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+            aspectRatio: { ideal: 16 / 9 },
+          },
+          audio: false,
+        },
+        // 2. Standard exact facingMode
+        {
+          video: {
+            facingMode: preferredFacing,
+          },
+          audio: false,
+        },
+        // 3. Fallback generic video stream
+        {
+          video: true,
+          audio: false,
+        },
+      ]
+
+      let stream: MediaStream | null = null
+      let lastErr: any = null
+
+      for (const constraints of constraintOptions) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints)
+          if (stream) break
+        } catch (err) {
+          lastErr = err
+        }
+      }
+
+      if (!stream) {
+        console.warn('Falha em todas as tentativas de getUserMedia:', lastErr)
+        let message = 'Não foi possível acessar a câmera do dispositivo.'
+        if (
+          lastErr?.name === 'NotAllowedError' ||
+          lastErr?.name === 'PermissionDeniedError' ||
+          lastErr?.message?.includes('Permission denied')
+        ) {
+          message =
+            'Permissão de câmera negada. Por favor, autorize o acesso à câmera nas configurações do navegador do celular.'
+        } else if (lastErr?.name === 'NotFoundError' || lastErr?.name === 'DevicesNotFoundError') {
+          message = 'Nenhuma câmera compatível encontrada neste dispositivo.'
+        } else if (lastErr?.name === 'NotReadableError' || lastErr?.name === 'TrackStartError') {
+          message =
+            'A câmera já está sendo utilizada por outro aplicativo ou aba. Feche outros apps e tente novamente.'
+        } else if (lastErr?.name === 'OverconstrainedError') {
+          message = 'Configuração de vídeo não suportada pela câmera deste dispositivo.'
         }
 
-        animationFrameId.current = requestAnimationFrame(detectFrame)
-      } catch (err) {
-        console.warn('BarcodeDetector initialization error:', err)
+        setCameraError(message)
+        setMode('manual')
+        return
       }
-    } else {
-      setHasNativeBarcode(false)
-    }
+
+      streamRef.current = stream
+
+      if (videoRef.current) {
+        const video = videoRef.current
+        video.srcObject = stream
+        video.setAttribute('playsinline', 'true') // Required for iOS Safari
+        video.setAttribute('webkit-playsinline', 'true')
+        video.muted = true
+
+        try {
+          await video.play()
+        } catch (playErr) {
+          console.warn('Autoplay error on video element:', playErr)
+        }
+      }
+
+      setScanningActive(true)
+      startDetectionLoop()
+    },
+    [facingMode, startDetectionLoop, stopCamera],
+  )
+
+  const toggleFacingMode = () => {
+    const nextMode = facingMode === 'environment' ? 'user' : 'environment'
+    setFacingMode(nextMode)
+    startCamera(nextMode)
   }
 
   useEffect(() => {
     if (open) {
       setMode('camera')
       setDetectedCode(null)
-      startCamera()
+      startCamera('environment')
     } else {
       stopCamera()
     }
@@ -200,7 +336,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onBookFound }: Barcode
     return () => {
       stopCamera()
     }
-  }, [open])
+  }, [open, startCamera, stopCamera])
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -216,8 +352,8 @@ export function BarcodeScannerModal({ open, onOpenChange, onBookFound }: Barcode
             Leitor de Código de Barras / ISBN
           </DialogTitle>
           <DialogDescription>
-            Aponte a câmera para o código de barras (EAN/ISBN) no verso do livro para preencher os
-            dados automaticamente.
+            Aponte a câmera para o código de barras (EAN-13/ISBN) no verso do livro para preencher
+            os dados automaticamente.
           </DialogDescription>
         </DialogHeader>
 
@@ -227,7 +363,7 @@ export function BarcodeScannerModal({ open, onOpenChange, onBookFound }: Barcode
             type="button"
             onClick={() => {
               setMode('camera')
-              startCamera()
+              startCamera(facingMode)
             }}
             className={`flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-colors ${
               mode === 'camera'
@@ -256,8 +392,8 @@ export function BarcodeScannerModal({ open, onOpenChange, onBookFound }: Barcode
         </div>
 
         {mode === 'camera' ? (
-          <div className="space-y-4 py-2">
-            <div className="relative aspect-4/3 w-full bg-slate-950 rounded-lg overflow-hidden border border-slate-300 flex items-center justify-center">
+          <div className="space-y-3 py-1">
+            <div className="relative aspect-4/3 w-full bg-slate-950 rounded-xl overflow-hidden border border-slate-300 flex items-center justify-center shadow-inner">
               <video
                 ref={videoRef}
                 playsInline
@@ -269,10 +405,16 @@ export function BarcodeScannerModal({ open, onOpenChange, onBookFound }: Barcode
               {/* Scanning visual guide frame */}
               {scanningActive && (
                 <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center p-6">
-                  <div className="w-64 h-32 border-2 border-emerald-400 rounded-lg shadow-lg relative bg-emerald-500/10 flex items-center justify-center">
-                    <div className="w-full h-0.5 bg-rose-500/80 animate-pulse shadow-sm" />
-                    <span className="absolute -bottom-6 text-[11px] text-white font-medium bg-slate-900/80 px-2 py-0.5 rounded backdrop-blur-xs">
-                      Enquadre o código de barras aqui
+                  <div className="w-64 sm:w-72 h-36 border-2 border-emerald-400 rounded-xl shadow-2xl relative bg-emerald-500/10 flex items-center justify-center overflow-hidden">
+                    <div className="w-full h-0.5 bg-rose-500 animate-pulse shadow-md" />
+                    {/* Corner Reticles */}
+                    <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-emerald-300" />
+                    <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-emerald-300" />
+                    <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-emerald-300" />
+                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-emerald-300" />
+
+                    <span className="absolute bottom-2 text-[10px] text-white font-medium bg-slate-900/80 px-2 py-0.5 rounded backdrop-blur-xs">
+                      Alinhe a linha vermelha sobre as barras
                     </span>
                   </div>
                 </div>
@@ -280,54 +422,77 @@ export function BarcodeScannerModal({ open, onOpenChange, onBookFound }: Barcode
 
               {/* Camera Error / Fallback State */}
               {cameraError && (
-                <div className="absolute inset-0 bg-slate-900/90 text-white p-6 flex flex-col items-center justify-center text-center space-y-3">
+                <div className="absolute inset-0 bg-slate-900/95 text-white p-6 flex flex-col items-center justify-center text-center space-y-3">
                   <CameraOff className="w-10 h-10 text-rose-400" />
-                  <p className="text-xs font-medium text-slate-200">{cameraError}</p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setMode('manual')}
-                    className="text-xs bg-white text-slate-900 border-none hover:bg-slate-100"
-                  >
-                    <Keyboard className="w-3.5 h-3.5 mr-1.5" />
-                    Digitar ISBN no teclado
-                  </Button>
+                  <p className="text-xs font-medium text-slate-200 max-w-sm">{cameraError}</p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setMode('manual')}
+                      className="text-xs bg-white text-slate-900 border-none hover:bg-slate-100 font-medium"
+                    >
+                      <Keyboard className="w-3.5 h-3.5 mr-1.5 text-emerald-700" />
+                      Digitar ISBN
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => startCamera(facingMode)}
+                      className="text-xs bg-slate-800 text-white border-slate-700 hover:bg-slate-700 font-medium"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                      Tentar Novamente
+                    </Button>
+                  </div>
                 </div>
               )}
 
               {searching && (
-                <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-xs text-white flex flex-col items-center justify-center gap-2">
+                <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-xs text-white flex flex-col items-center justify-center gap-2 z-10">
                   <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
                   <p className="text-xs font-semibold">Consultando informações do livro...</p>
                   {detectedCode && (
-                    <span className="text-[11px] font-mono text-emerald-300">
+                    <span className="text-[11px] font-mono text-emerald-300 flex items-center gap-1 bg-slate-800/80 px-2 py-0.5 rounded border border-emerald-500/30">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                       ISBN: {detectedCode}
                     </span>
                   )}
                 </div>
               )}
+
+              {/* Botão de alternar câmera (traseira/frontal) no celular */}
+              {scanningActive && (
+                <button
+                  type="button"
+                  onClick={toggleFacingMode}
+                  className="absolute top-3 right-3 p-2 rounded-full bg-slate-900/70 text-white hover:bg-slate-900 transition-colors shadow-md backdrop-blur-xs"
+                  title="Alternar câmera frontal/traseira"
+                  aria-label="Alternar câmera"
+                >
+                  <SwitchCamera className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
-            {/* Hint or fallback button if native barcode isn't auto-firing */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded border border-slate-200">
+            {/* Hint and controls */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
               <div className="flex items-center gap-1.5 text-[11px]">
                 <Sparkles className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>
-                  {hasNativeBarcode
-                    ? 'Leitor automático ativo. Aproxime o livro da câmera.'
-                    : 'Dica: Se a câmera não detectar, digite o ISBN abaixo.'}
-                </span>
+                <span>Posicione o código de barras com boa iluminação e foco.</span>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={startCamera}
-                className="h-7 text-xs text-slate-700 hover:text-emerald-700"
-              >
-                <RefreshCw className="w-3 h-3 mr-1" />
-                Reiniciar Câmera
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => startCamera(facingMode)}
+                  className="h-7 text-xs text-slate-700 hover:text-emerald-700"
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Reiniciar Câmera
+                </Button>
+              </div>
             </div>
           </div>
         ) : (
@@ -364,13 +529,13 @@ export function BarcodeScannerModal({ open, onOpenChange, onBookFound }: Barcode
               </p>
             </div>
 
-            <div className="bg-amber-50/70 border border-amber-200 rounded p-3 text-xs text-amber-900 flex items-start gap-2">
+            <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-3 text-xs text-amber-900 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold">Serviço de busca bibliográfica</p>
+                <p className="font-semibold">Busca bibliográfica automática</p>
                 <p className="text-[11px] text-amber-800 mt-0.5">
-                  Os dados são buscados automaticamente na base pública do Google Books e Open
-                  Library.
+                  Os dados de título, autores, editora e sinopse são buscados na base pública do
+                  Google Books e Open Library.
                 </p>
               </div>
             </div>

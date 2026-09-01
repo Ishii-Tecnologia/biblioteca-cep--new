@@ -56,6 +56,39 @@ export const ReservasService = {
   },
 
   /**
+   * Busca reservas de um leitor específico (ou de um usuário autenticado)
+   */
+  async getByLeitor(id_leitor: number, statusFilter = 'all') {
+    let query = supabase
+      .from('reserva')
+      .select(`
+        *,
+        titulo:id_titulo(
+          titulo_de_livro,
+          autor,
+          categoria,
+          capa_url
+        ),
+        leitor:id_leitor(
+          nome_do_leitor,
+          email,
+          telefone,
+          bloqueado
+        )
+      `)
+      .eq('id_leitor', id_leitor)
+      .order('data_reserva', { ascending: false })
+
+    if (statusFilter && statusFilter !== 'all') {
+      query = query.eq('status_reserva', statusFilter)
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+    return (data || []) as unknown as ReservaDetailed[]
+  },
+
+  /**
    * Conta reservas ativas pendentes para badge no cabeçalho (F-02)
    */
   async countActive(): Promise<number> {
@@ -105,6 +138,18 @@ export const ReservasService = {
 
     if (existing) {
       throw new Error('Você já possui uma reserva ativa na fila para esta obra.')
+    }
+
+    // 1.1 Verificar se o leitor já possui exemplar deste título emprestado
+    const { data: emprestimosAtivosDoLeitor } = await supabase
+      .from('emprestimo')
+      .select('id_emprestimo, exemplar!inner(id_titulo)')
+      .eq('id_leitor', id_leitor)
+      .is('data_devolucao_real', null)
+      .eq('exemplar.id_titulo', id_titulo)
+
+    if (emprestimosAtivosDoLeitor && emprestimosAtivosDoLeitor.length > 0) {
+      throw new Error('Você já possui um exemplar desta mesma obra emprestado atualmente.')
     }
 
     // 2. Check reader not blocked

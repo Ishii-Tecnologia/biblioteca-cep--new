@@ -20,8 +20,13 @@ import {
   BookMarked,
   KeyRound,
   UserCheck,
+  Camera,
+  Eye,
+  EyeOff,
+  Sparkles,
 } from 'lucide-react'
 import { ChangeOwnPasswordModal } from '@/components/ChangeOwnPasswordModal'
+import { EditOwnPhotoModal } from '@/components/EditOwnPhotoModal'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -39,9 +44,19 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const { user, profile, isAdmin, isOperadorOrAdmin, signOut } = useAuth()
+  const {
+    user,
+    profile,
+    isAdmin,
+    isOperadorOrAdmin,
+    isRealAdmin,
+    isSimulatingReader,
+    toggleReaderViewSimulation,
+    signOut,
+  } = useAuth()
   const { emprestimosAtivos, reservasAtivas } = useHeaderCounters()
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
+  const [editPhotoOpen, setEditPhotoOpen] = React.useState(false)
   const [prazoDias, setPrazoDias] = React.useState<number>(15)
   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false)
   const navigate = useNavigate()
@@ -109,6 +124,34 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* Banner de Modo de Simulação de Visualização do Leitor para Administradores */}
+      {isSimulatingReader && (
+        <aside
+          aria-label="Aviso de Modo Visualização de Leitor"
+          className="bg-gradient-to-r from-amber-600 to-amber-700 text-white px-4 py-2 text-xs font-medium shadow-sm flex items-center justify-between gap-3 sticky top-0 z-50 animate-in fade-in duration-200"
+        >
+          <div className="flex items-center gap-2 max-w-4xl mx-auto flex-1">
+            <Eye className="w-4 h-4 shrink-0 text-amber-200" />
+            <div className="leading-tight">
+              <span className="font-bold">Modo de Visualização de Leitor Ativo:</span>{' '}
+              <span className="text-amber-100">
+                Você está navegando com as mesmas permissões e restrições de um leitor comum (sem
+                botões de cadastro, edição ou relatórios).
+              </span>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => toggleReaderViewSimulation(false)}
+            className="h-7 text-xs bg-white text-amber-900 hover:bg-amber-50 font-bold shrink-0 shadow-xs gap-1"
+          >
+            <EyeOff className="w-3.5 h-3.5" />
+            Voltar para Visão de Administrador
+          </Button>
+        </aside>
+      )}
+
       {/* Main Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -311,6 +354,20 @@ export default function Layout({ children }: LayoutProps) {
                         </DropdownMenuItem>
                       </>
                     )}
+                    {isRealAdmin && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => toggleReaderViewSimulation(!isSimulatingReader)}
+                          className="cursor-pointer text-amber-800 bg-amber-50/70 hover:bg-amber-100/80 font-medium"
+                        >
+                          <Eye className="w-4 h-4 mr-2 text-amber-600" />
+                          {isSimulatingReader
+                            ? 'Sair da Visualização de Leitor'
+                            : 'Modo Visualização de Leitor'}
+                        </DropdownMenuItem>
+                      </>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => setChangePasswordOpen(true)}
@@ -364,36 +421,99 @@ export default function Layout({ children }: LayoutProps) {
           <div className="md:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-5 space-y-3 animate-in slide-in-from-top-2 duration-200 shadow-lg">
             {/* User Profile Card inside Mobile Drawer */}
             {user ? (
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <Avatar className="w-10 h-10 border-2 border-emerald-500/20 shadow-xs shrink-0">
-                    {profile?.avatar_url ? (
-                      <AvatarImage
-                        src={profile.avatar_url}
-                        alt={profile.full_name || 'Foto de perfil'}
-                        className="object-cover"
-                      />
-                    ) : null}
-                    <AvatarFallback className="bg-emerald-100 text-emerald-800 font-bold text-sm">
-                      {getInitials(profile?.full_name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-bold text-slate-900 truncate">
-                      {profile?.full_name ||
-                        user.user_metadata?.full_name ||
-                        user.user_metadata?.nome ||
-                        user.email?.split('@')[0] ||
-                        'Usuário'}
-                    </span>
-                    <span className="text-xs text-slate-500 truncate">{user.email}</span>
-                    <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md w-fit">
-                      <Shield className="w-3 h-3" />
-                      <span>
-                        {isAdmin ? 'Administrador' : isOperadorOrAdmin ? 'Operador' : 'Leitor'}
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="relative group/avatar shrink-0">
+                      <Avatar className="w-12 h-12 border-2 border-emerald-500/40 shadow-xs">
+                        {profile?.avatar_url ? (
+                          <AvatarImage
+                            src={profile.avatar_url}
+                            alt={profile.full_name || 'Foto de perfil'}
+                            className="object-cover"
+                          />
+                        ) : null}
+                        <AvatarFallback className="bg-emerald-100 text-emerald-800 font-bold text-sm">
+                          {getInitials(profile?.full_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMobileMenuOpen(false)
+                          setEditPhotoOpen(true)
+                        }}
+                        aria-label="Editar foto de perfil"
+                        className="absolute -bottom-1 -right-1 bg-emerald-600 text-white rounded-full p-1 shadow-sm hover:bg-emerald-700 transition-colors"
+                        title="Alterar minha foto de perfil"
+                      >
+                        <Camera className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-bold text-slate-900 truncate">
+                        {profile?.full_name ||
+                          user.user_metadata?.full_name ||
+                          user.user_metadata?.nome ||
+                          user.email?.split('@')[0] ||
+                          'Usuário'}
                       </span>
+                      <span className="text-xs text-slate-500 truncate">{user.email}</span>
+                      <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md w-fit">
+                        <Shield className="w-3 h-3" />
+                        <span>
+                          {isAdmin ? 'Administrador' : isOperadorOrAdmin ? 'Operador' : 'Leitor'}
+                        </span>
+                      </div>
                     </div>
                   </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      setEditPhotoOpen(true)
+                    }}
+                    className="text-xs h-7 px-2.5 border-emerald-300 text-emerald-800 hover:bg-emerald-50 shrink-0 gap-1"
+                  >
+                    <Camera className="w-3 h-3" />
+                    <span>Editar Foto</span>
+                  </Button>
+                </div>
+
+                {/* Atalho Rápido para Reservas Ativas do Leitor */}
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+                  <Link
+                    to="/reservas?status=Ativa&minhas=true"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-between p-2 rounded-lg bg-amber-50 hover:bg-amber-100/80 border border-amber-200/80 text-amber-900 transition-colors"
+                    title="Ver minhas reservas ativas na fila"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <BookmarkCheck className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                      <span className="text-xs font-semibold truncate">Minhas Reservas</span>
+                    </div>
+                    {reservasAtivas > 0 && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 bg-amber-200/90 text-amber-900 rounded-full shrink-0">
+                        {reservasAtivas}
+                      </span>
+                    )}
+                  </Link>
+
+                  <Link
+                    to="/leitores"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center justify-between p-2 rounded-lg bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-200/80 text-emerald-900 transition-colors"
+                    title="Acessar meus dados cadastrais"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <UserCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                      <span className="text-xs font-semibold truncate">Meus Dados</span>
+                    </div>
+                  </Link>
                 </div>
               </div>
             ) : (
@@ -468,6 +588,41 @@ export default function Layout({ children }: LayoutProps) {
             {/* Ações de Conta no Menu Mobile */}
             {user && (
               <div className="pt-2 border-t border-slate-100 space-y-1">
+                {/* Botão de Visualização de Leitor para Administradores no Mobile */}
+                {isRealAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileMenuOpen(false)
+                      toggleReaderViewSimulation(!isSimulatingReader)
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-left font-semibold transition-colors ${
+                      isSimulatingReader
+                        ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
+                        : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                    }`}
+                  >
+                    <Eye className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      {isSimulatingReader
+                        ? 'Desativar Modo Leitor (Voltar Admin)'
+                        : 'Modo Visualização de Leitor'}
+                    </span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    setEditPhotoOpen(true)
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left font-medium"
+                >
+                  <Camera className="w-4 h-4 text-emerald-600" />
+                  <span>Alterar minha foto de perfil</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -479,6 +634,7 @@ export default function Layout({ children }: LayoutProps) {
                   <KeyRound className="w-4 h-4 text-emerald-600" />
                   <span>Alterar minha senha</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -501,6 +657,9 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Modal de Alteração da Própria Senha */}
       <ChangeOwnPasswordModal open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
+
+      {/* Modal de Alteração da Própria Foto */}
+      <EditOwnPhotoModal open={editPhotoOpen} onOpenChange={setEditPhotoOpen} />
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 py-6 mt-auto">

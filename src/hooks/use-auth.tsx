@@ -20,6 +20,9 @@ interface AuthContextType {
   role: UserRole
   isAdmin: boolean
   isOperadorOrAdmin: boolean
+  isRealAdmin: boolean
+  isSimulatingReader: boolean
+  toggleReaderViewSimulation: (enable?: boolean) => void
   signUp: (
     email: string,
     password: string,
@@ -72,10 +75,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // Fetch public.profiles to get real-time avatar_url and latest name/papel
       const { data: profileRow } = await supabase
         .from('profiles')
-        .select('nome, full_name, role, papel, avatar_url')
+        .select('nome, full_name, role, papel, avatar_url, telefone')
         .eq('id', currentUser.id)
         .maybeSingle()
-
       const fullName =
         profileRow?.nome ||
         profileRow?.full_name ||
@@ -340,12 +342,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { error }
   }
 
-  const currentRole: UserRole = profile?.role || (user ? 'leitor' : 'guest')
-  const isAdmin =
-    currentRole === 'admin' ||
+  // Modo de visualização de leitor para administradores (simulação de permissões)
+  const [readerViewSimulation, setReaderViewSimulation] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('cep_admin_reader_simulation') === 'true'
+    } catch {
+      return false
+    }
+  })
+
+  const realRole: UserRole = profile?.role || (user ? 'leitor' : 'guest')
+  const isRealAdmin =
+    realRole === 'admin' ||
     user?.email === 'ishii7883@gmail.com' ||
     user?.email === 'admin@cep.edu.br'
-  const isOperadorOrAdmin = isAdmin || currentRole === 'operador'
+
+  const isSimulatingReader = isRealAdmin && readerViewSimulation
+
+  const toggleReaderViewSimulation = (enable?: boolean) => {
+    const nextState = enable !== undefined ? enable : !readerViewSimulation
+    setReaderViewSimulation(nextState)
+    try {
+      localStorage.setItem('cep_admin_reader_simulation', String(nextState))
+    } catch {
+      /* intentionally ignored */
+    }
+  }
+
+  const effectiveRole: UserRole = isSimulatingReader ? 'leitor' : realRole
+  const isAdmin = isSimulatingReader ? false : isRealAdmin
+  const isOperadorOrAdmin = isSimulatingReader ? false : isRealAdmin || effectiveRole === 'operador'
 
   return (
     <AuthContext.Provider
@@ -353,9 +379,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         user,
         session,
         profile,
-        role: currentRole,
+        role: effectiveRole,
         isAdmin,
         isOperadorOrAdmin,
+        isRealAdmin,
+        isSimulatingReader,
+        toggleReaderViewSimulation,
         signUp,
         signIn,
         signOut,
