@@ -82,7 +82,10 @@ export default function Login() {
         }
 
         const welcomeTitle = displayName ? `Bem-vindo, ${displayName}!` : 'Bem-vindo!'
-        toast({ title: welcomeTitle, description: 'Login realizado com sucesso.' })
+        toast({
+          title: welcomeTitle,
+          description: 'Login realizado com sucesso. Acesso liberado ao sistema.',
+        })
         navigate(from, { replace: true })
       }
     } finally {
@@ -144,8 +147,8 @@ export default function Login() {
         })
       } else {
         toast({
-          title: 'Conta criada com sucesso!',
-          description: `Bem-vindo(a), ${cleanName}! Você foi conectado(a) automaticamente.`,
+          title: `Bem-vindo, ${cleanName}!`,
+          description: 'Conta criada com sucesso. Você foi conectado(a) automaticamente.',
         })
         // Login automático já efetuado internamente, redireciona para a tela pretendida
         navigate(from, { replace: true })

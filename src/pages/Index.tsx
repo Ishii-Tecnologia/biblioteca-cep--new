@@ -169,24 +169,21 @@ export default function Index() {
                 físicas totais
               </p>
               {stats.exemplaresManutencao > 0 ? (
-                <Link
-                  to="/acervo?status=Manutencao"
-                  className="flex items-center gap-1 text-rose-600 font-medium hover:underline hover:text-rose-700 transition-colors group cursor-pointer"
-                  title="Ver exemplares em manutenção no acervo"
+                <div
+                  className="flex items-center gap-1 text-slate-400/80 font-normal cursor-default select-none opacity-60"
+                  title="Exemplares atualmente em manutenção"
                 >
-                  <Wrench className="w-3 h-3 shrink-0 group-hover:rotate-12 transition-transform" />
+                  <Wrench className="w-3 h-3 shrink-0 opacity-70" />
                   <span>{stats.exemplaresManutencao} em manutenção</span>
-                  <ArrowRight className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity ml-0.5" />
-                </Link>
+                </div>
               ) : (
-                <Link
-                  to="/acervo?status=Manutencao"
-                  className="flex items-center gap-1 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
-                  title="Ver exemplares em manutenção no acervo"
+                <div
+                  className="flex items-center gap-1 text-slate-400/80 font-normal cursor-default select-none opacity-60"
+                  title="Exemplares atualmente em manutenção"
                 >
-                  <Wrench className="w-3 h-3 shrink-0" />
+                  <Wrench className="w-3 h-3 shrink-0 opacity-70" />
                   <span>0 em manutenção</span>
-                </Link>
+                </div>
               )}
             </div>
           </CardContent>

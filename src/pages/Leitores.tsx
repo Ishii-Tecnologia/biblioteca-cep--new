@@ -487,11 +487,13 @@ export default function Leitores() {
         title="Excluir Cadastro do Leitor"
         description={
           readerToDelete ? (
-            <span>
-              Tem certeza que deseja excluir o leitor{' '}
-              <strong className="text-rose-600 font-bold">{readerToDelete.nome_do_leitor}</strong>?
-              Esta ação removerá o cadastro permanentemente e não pode ser desfeita.
-            </span>
+            <div className="space-y-1.5">
+              <p>Deseja realmente excluir o cadastro do leitor:</p>
+              <p className="text-rose-600 font-semibold break-words">
+                "{readerToDelete.nome_do_leitor}" (ID #{readerToDelete.id_leitor})
+              </p>
+              <p className="text-slate-500">Esta ação não pode ser desfeita.</p>
+            </div>
           ) : (
             'Tem certeza que deseja excluir o leitor? Esta ação não pode ser desfeita.'
           )

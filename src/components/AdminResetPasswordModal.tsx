@@ -81,8 +81,8 @@ export function AdminResetPasswordModal({
       }
 
       toast({
-        title: 'Senha alterada com sucesso!',
-        description: `A nova senha para ${displayName} foi definida.`,
+        title: `Senha redefinida com sucesso!`,
+        description: `A nova senha para ${displayName} foi definida com sucesso.`,
       })
 
       onOpenChange(false)
