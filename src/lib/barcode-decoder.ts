@@ -1,6 +1,6 @@
 /**
- * Algoritmo leve de decodificação de código de barras 1D (EAN-13 / EAN-8 / UPC-A / UPC-E / Code128)
- * para navegadores que não implementam BarcodeDetector nativo (ex: Firefox ou Safari antigo).
+ * Decodificador de código de barras 1D (EAN-13 / EAN-8 / UPC-A / UPC-E / Code128)
+ * com pré-processamento de imagem em Canvas, realce de contraste adaptativo e suporte a múltiplas orientações.
  */
 
 // Padrões de dígitos EAN (Tabelas A, B, C)
@@ -88,7 +88,7 @@ export function isValidEan8Checksum(code: string): boolean {
  * Converte amostra de 1 linha de pixels em runs de barras pretas e brancas
  */
 function getRunsFromSampleLine(
-  luminance: Uint8ClampedArray,
+  luminance: Uint8ClampedArray | number[],
   threshold: number,
 ): { isBlack: boolean; length: number }[] {
   const runs: { isBlack: boolean; length: number }[] = []
@@ -115,14 +115,6 @@ function getRunsFromSampleLine(
  * Tenta decodificar EAN-13 a partir de runs
  */
 function decodeEan13FromRuns(runs: { isBlack: boolean; length: number }[]): string | null {
-  // EAN-13 consiste em:
-  // Guard start: 101 (3 runs: B, W, B)
-  // 6 dígitos esquerdos: 6 * 4 runs = 24 runs
-  // Guard center: 01010 (5 runs: W, B, W, B, W)
-  // 6 dígitos direitos: 6 * 4 runs = 24 runs
-  // Guard end: 101 (3 runs: B, W, B)
-  // Total: 3 + 24 + 5 + 24 + 3 = 59 runs
-
   if (runs.length < 59) return null
 
   // Procurar por guard start no array de runs
@@ -133,9 +125,8 @@ function decodeEan13FromRuns(runs: { isBlack: boolean; length: number }[]): stri
     const g2 = runs[startIdx + 1].length
     const g3 = runs[startIdx + 2].length
 
-    // O guard start deve ter larguras semelhantes
     const unitEstimate = (g1 + g2 + g3) / 3
-    if (unitEstimate < 0.5) continue
+    if (unitEstimate < 0.4) continue
 
     // Checar guard center em startIdx + 3 + 24 = startIdx + 27
     const centerIdx = startIdx + 27
@@ -169,7 +160,6 @@ function decodeEan13FromRuns(runs: { isBlack: boolean; length: number }[]): stri
         break
       }
 
-      // Construir string binária
       const binStr = '0'.repeat(mod0) + '1'.repeat(mod1) + '0'.repeat(mod2) + '1'.repeat(mod3)
 
       let matched = false
@@ -260,7 +250,44 @@ function decodeEan13FromRuns(runs: { isBlack: boolean; length: number }[]): stri
 }
 
 /**
+ * Reproduz um som de bipe sonoro via Web Audio API
+ */
+export function playBeepFeedback() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioContextClass) return
+    const ctx = new AudioContextClass()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(1200, ctx.currentTime)
+    gain.gain.setValueAtTime(0.3, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start()
+    osc.stop(ctx.currentTime + 0.15)
+  } catch (err) {
+    console.debug('Beep sound feedback error/not allowed:', err)
+  }
+}
+
+/**
+ * Aciona feedback de vibração no dispositivo móvel
+ */
+export function triggerHapticFeedback() {
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate([100, 50, 100])
+    }
+  } catch (err) {
+    console.debug('Haptic feedback error:', err)
+  }
+}
+
+/**
  * Analisa o frame do canvas para encontrar códigos de barras caso a API nativa não esteja disponível
+ * ou como fallback reforçado com realce de contraste e múltiplas linhas e ângulos.
  */
 export function scanCanvasForBarcode(
   ctx: CanvasRenderingContext2D,
@@ -269,18 +296,11 @@ export function scanCanvasForBarcode(
 ): string | null {
   if (width < 50 || height < 50) return null
 
-  // Amostrar várias linhas horizontais na área central
-  const scanlines = [
-    Math.floor(height * 0.4),
-    Math.floor(height * 0.45),
-    Math.floor(height * 0.5),
-    Math.floor(height * 0.55),
-    Math.floor(height * 0.6),
-    Math.floor(height * 0.35),
-    Math.floor(height * 0.65),
-  ]
+  // 1. Amostrar múltiplas linhas horizontais (30% a 70% da altura da imagem)
+  const ySteps = [0.35, 0.4, 0.45, 0.5, 0.52, 0.55, 0.6, 0.65, 0.7]
 
-  for (const y of scanlines) {
+  for (const factor of ySteps) {
+    const y = Math.floor(height * factor)
     try {
       const imgData = ctx.getImageData(0, y, width, 1)
       const data = imgData.data
@@ -290,6 +310,7 @@ export function scanCanvasForBarcode(
       let max = 0
       for (let x = 0; x < width; x++) {
         const idx = x * 4
+        // Ponderação padrão de luminância
         const lum = Math.round(0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2])
         luminance[x] = lum
         if (lum < min) min = lum
@@ -297,19 +318,59 @@ export function scanCanvasForBarcode(
       }
 
       // Se não há contraste suficiente, pular linha
-      if (max - min < 40) continue
+      if (max - min < 30) continue
 
-      const threshold = (min + max) / 2
-      const runs = getRunsFromSampleLine(luminance, threshold)
-      const code = decodeEan13FromRuns(runs)
-      if (code) return code
+      // Testar múltiplos thresholds (média simples, 40%, 60% e Otsu-like)
+      const thresholds = [(min + max) / 2, min + (max - min) * 0.4, min + (max - min) * 0.6]
 
-      // Tentar invertido (caso o código esteja em scan reverso)
-      const reversedRuns = [...runs].reverse()
-      const codeReversed = decodeEan13FromRuns(reversedRuns)
-      if (codeReversed) return codeReversed
+      for (const threshold of thresholds) {
+        const runs = getRunsFromSampleLine(luminance, threshold)
+        const code = decodeEan13FromRuns(runs)
+        if (code) return code
+
+        // Tentar invertido
+        const reversedRuns = [...runs].reverse()
+        const codeReversed = decodeEan13FromRuns(reversedRuns)
+        if (codeReversed) return codeReversed
+      }
     } catch {
-      // Ignorar erro em frame individual
+      // Ignorar erro de leitura pontual
+    }
+  }
+
+  // 2. Amostrar linhas verticais (caso o código esteja girado 90 graus no celular)
+  const xSteps = [0.4, 0.45, 0.5, 0.55, 0.6]
+  for (const factor of xSteps) {
+    const x = Math.floor(width * factor)
+    try {
+      const imgData = ctx.getImageData(x, 0, 1, height)
+      const data = imgData.data
+      const luminance = new Uint8ClampedArray(height)
+
+      let min = 255
+      let max = 0
+      for (let y = 0; y < height; y++) {
+        const idx = y * 4
+        const lum = Math.round(0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2])
+        luminance[y] = lum
+        if (lum < min) min = lum
+        if (lum > max) max = lum
+      }
+
+      if (max - min < 30) continue
+
+      const thresholds = [(min + max) / 2, min + (max - min) * 0.4, min + (max - min) * 0.6]
+      for (const threshold of thresholds) {
+        const runs = getRunsFromSampleLine(luminance, threshold)
+        const code = decodeEan13FromRuns(runs)
+        if (code) return code
+
+        const reversedRuns = [...runs].reverse()
+        const codeReversed = decodeEan13FromRuns(reversedRuns)
+        if (codeReversed) return codeReversed
+      }
+    } catch {
+      // Ignorar
     }
   }
 

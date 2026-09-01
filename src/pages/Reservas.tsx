@@ -17,9 +17,16 @@ import {
   User,
   PlusCircle,
   Calendar,
+  ListOrdered,
+  Sparkles,
+  Bell,
+  Mail,
+  Hourglass,
 } from 'lucide-react'
 import { ReserveModal } from '@/components/ReserveModal'
 import { ConfirmModal } from '@/components/ConfirmModal'
+import { QueueManagementModal } from '@/components/QueueManagementModal'
+import { ReadyForPickupModal } from '@/components/ReadyForPickupModal'
 import { useToast } from '@/hooks/use-toast'
 import { formatDate } from '@/lib/utils'
 
@@ -45,6 +52,16 @@ export default function Reservas() {
 
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [reservaToCancel, setReservaToCancel] = useState<ReservaDetailed | null>(null)
+
+  // Queue and Ready Modals
+  const [queueModalOpen, setQueueModalOpen] = useState(false)
+  const [queueBookInfo, setQueueBookInfo] = useState<{ id: string; title: string }>({
+    id: '',
+    title: '',
+  })
+
+  const [readyModalOpen, setReadyModalOpen] = useState(false)
+  const [reservaToReady, setReservaToReady] = useState<ReservaDetailed | null>(null)
 
   const loadReservas = async () => {
     setLoading(true)
@@ -96,6 +113,19 @@ export default function Reservas() {
   const handleFulfill = (res: ReservaDetailed) => {
     setReservaToFulfill(res)
     setFulfillConfirmOpen(true)
+  }
+
+  const handleOpenQueueManagement = (res: ReservaDetailed) => {
+    setQueueBookInfo({
+      id: res.id_titulo,
+      title: res.titulo?.titulo_de_livro || res.id_titulo,
+    })
+    setQueueModalOpen(true)
+  }
+
+  const handleOpenReadyForPickup = (res: ReservaDetailed) => {
+    setReservaToReady(res)
+    setReadyModalOpen(true)
   }
 
   const executeFulfill = async () => {
@@ -271,6 +301,12 @@ export default function Reservas() {
                       <span className="font-mono text-xs font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded border">
                         Reserva #{res.id_reserva}
                       </span>
+                      {res.status_reserva === 'Pronta para Retirada' && (
+                        <span className="inline-flex items-center rounded-full border border-emerald-400 bg-emerald-100 px-2.5 py-0.5 text-[11px] font-bold text-emerald-900 gap-1 select-none pointer-events-none animate-pulse">
+                          <Sparkles className="w-3 h-3 text-emerald-600" />
+                          Pronto para Retirada (Reserva Garantida)
+                        </span>
+                      )}
                       {res.status_reserva === 'Ativa' && (
                         <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 gap-1 select-none pointer-events-none">
                           <Clock className="w-3 h-3 text-amber-600" />
@@ -278,7 +314,7 @@ export default function Reservas() {
                             <span>
                               {res.posicao_fila}º lugar na fila
                               {res.total_fila && res.total_fila > 1
-                                ? ` (de ${res.total_fila})`
+                                ? ` (de ${res.total_fila} leitores)`
                                 : ''}
                             </span>
                           ) : (
@@ -299,19 +335,56 @@ export default function Reservas() {
                       )}
                     </div>
 
-                    {/* Bloco de Histórico / Acompanhamento da Fila e Atendimento */}
-                    {res.status_reserva === 'Ativa' && (
-                      <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg p-2.5 text-xs text-amber-900 flex items-start gap-2.5 mt-1">
-                        <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <div className="space-y-0.5">
-                          <p className="font-semibold text-amber-950">
-                            {res.posicao_fila === 1
-                              ? 'Você é o próximo na fila de espera!'
-                              : `Posição na fila: ${res.posicao_fila}º lugar`}
+                    {/* Bloco de Reserva Garantida (Pronta para Retirada) */}
+                    {res.status_reserva === 'Pronta para Retirada' && (
+                      <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-3 text-xs text-emerald-950 flex items-start gap-2.5 mt-1 shadow-xs">
+                        <Sparkles className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1 flex-1">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <p className="font-bold text-emerald-900 flex items-center gap-1.5">
+                              Exemplar reservado aguardando sua retirada!
+                            </p>
+                            {res.data_limite_retirada && (
+                              <span className="text-[11px] font-semibold bg-emerald-200/80 text-emerald-900 px-2 py-0.5 rounded border border-emerald-400">
+                                Reserva Garantida até: {formatDate(res.data_limite_retirada)}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-emerald-800 leading-relaxed">
+                            O livro já está separado na recepção da biblioteca. Compareça dentro do
+                            prazo de reserva garantida (
+                            {res.horas_restantes_garantida
+                              ? `aprox. ${res.horas_restantes_garantida}h restantes`
+                              : '24 horas'}
+                            ) para concluir a retirada física.
                           </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bloco de Acompanhamento da Fila e Previsão de Devolução */}
+                    {res.status_reserva === 'Ativa' && (
+                      <div className="bg-amber-50/80 border border-amber-200/90 rounded-lg p-2.5 text-xs text-amber-900 flex items-start gap-2.5 mt-1">
+                        <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1 flex-1">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <p className="font-semibold text-amber-950">
+                              {res.posicao_fila === 1
+                                ? 'Você é o próximo na fila de espera!'
+                                : `Posição na fila: ${res.posicao_fila}º lugar`}
+                            </p>
+                            {res.data_estimada_disponibilidade && (
+                              <span className="text-[11px] bg-amber-100 text-amber-900 font-medium px-2 py-0.5 rounded border border-amber-300/70 flex items-center gap-1">
+                                <Hourglass className="w-3 h-3 text-amber-700" />
+                                Previsão de disponibilidade:{' '}
+                                {formatDate(res.data_estimada_disponibilidade)}
+                              </span>
+                            )}
+                          </div>
                           <p className="text-[11px] text-amber-800 leading-relaxed">
-                            Assim que um exemplar for devolvido, a equipe da biblioteca atenderá sua
-                            reserva e gerará seu empréstimo.
+                            Estimativa calculada a partir do prazo de devolução dos exemplares
+                            atualmente emprestados. Você será notificado por e-mail/push assim que o
+                            livro for liberado.
                           </p>
                         </div>
                       </div>
@@ -385,33 +458,60 @@ export default function Reservas() {
                       </span>
                     </div>
 
-                    {res.status_reserva === 'Ativa' && isOperadorOrAdmin && (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={isLoadingThis}
-                          onClick={() => handleCancel(res)}
-                          className="h-8 text-xs border-slate-200 text-slate-600 hover:bg-slate-100 gap-1"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          Cancelar
-                        </Button>
-                        <Button
-                          size="sm"
-                          disabled={isLoadingThis}
-                          onClick={() => handleFulfill(res)}
-                          className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium gap-1 shadow-sm"
-                        >
-                          {isLoadingThis ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <Check className="w-3.5 h-3.5" />
+                    {(res.status_reserva === 'Ativa' ||
+                      res.status_reserva === 'Pronta para Retirada') &&
+                      isOperadorOrAdmin && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenQueueManagement(res)}
+                            className="h-8 text-xs border-slate-200 text-slate-700 hover:bg-slate-100 gap-1 font-medium"
+                            title="Ver e gerenciar a ordem de todos os leitores nesta fila"
+                          >
+                            <ListOrdered className="w-3.5 h-3.5 text-indigo-600" />
+                            Ver Fila Completa
+                          </Button>
+
+                          {res.status_reserva === 'Ativa' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenReadyForPickup(res)}
+                              className="h-8 text-xs bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 gap-1 font-medium"
+                              title="Liberar livro com tempo garantido e notificar leitor"
+                            >
+                              <Bell className="w-3.5 h-3.5 text-emerald-700" />
+                              Liberar p/ Retirada
+                            </Button>
                           )}
-                          Atender Reserva
-                        </Button>
-                      </div>
-                    )}
+
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isLoadingThis}
+                            onClick={() => handleCancel(res)}
+                            className="h-8 text-xs border-slate-200 text-slate-600 hover:bg-slate-100 gap-1"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            Cancelar
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            disabled={isLoadingThis}
+                            onClick={() => handleFulfill(res)}
+                            className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium gap-1 shadow-sm"
+                          >
+                            {isLoadingThis ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Check className="w-3.5 h-3.5" />
+                            )}
+                            Concluir Empréstimo
+                          </Button>
+                        </div>
+                      )}
                   </div>
                 </div>
               </Card>
@@ -436,6 +536,23 @@ export default function Reservas() {
         variant="primary"
         loading={actionLoadingId === reservaToFulfill?.id_reserva}
         onConfirm={executeFulfill}
+      />
+
+      {/* Modal de Gestão Completa de Fila e Reordenação (Admin) */}
+      <QueueManagementModal
+        open={queueModalOpen}
+        onOpenChange={setQueueModalOpen}
+        idTitulo={queueBookInfo.id}
+        tituloNome={queueBookInfo.title}
+        onQueueUpdated={loadReservas}
+      />
+
+      {/* Modal de Liberar para Retirada (Reserva Garantida + Notificação) */}
+      <ReadyForPickupModal
+        open={readyModalOpen}
+        onOpenChange={setReadyModalOpen}
+        reserva={reservaToReady}
+        onSuccess={loadReservas}
       />
 
       <ConfirmModal

@@ -30,6 +30,15 @@ export async function getMaxRenovacoes(): Promise<number> {
   return data ? parseInt(data.valor) : 1
 }
 
+export async function getTempoReservaGarantidaHoras(): Promise<number> {
+  const { data } = await supabase
+    .from('parametros')
+    .select('valor')
+    .eq('chave', 'tempo_reserva_garantida_horas')
+    .maybeSingle()
+  return data ? parseInt(data.valor, 10) : 24
+}
+
 export const ParametrosService = {
   async getAll() {
     const { data, error } = await supabase.from('parametros').select('*')

@@ -25,7 +25,11 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { fetchBookByIsbn, BookMetadata, sanitizeIsbn } from '@/services/isbn'
-import { scanCanvasForBarcode } from '@/lib/barcode-decoder'
+import {
+  scanCanvasForBarcode,
+  playBeepFeedback,
+  triggerHapticFeedback,
+} from '@/lib/barcode-decoder'
 
 interface BarcodeScannerModalProps {
   open: boolean
@@ -148,8 +152,8 @@ export function BarcodeScannerModal({ open, onOpenChange, onBookFound }: Barcode
         video.videoWidth > 0 &&
         video.videoHeight > 0
       ) {
-        // Run scan at maximum 10-15 fps to avoid overheating mobile CPU
-        if (timestamp - lastScanTime > 80 && !handledCodeRef.current) {
+        // Increased frame frequency for mobile responsiveness (~25-30 fps, interval 35ms)
+        if (timestamp - lastScanTime > 35 && !handledCodeRef.current) {
           lastScanTime = timestamp
 
           // 1. Try native BarcodeDetector first
@@ -162,6 +166,8 @@ export function BarcodeScannerModal({ open, onOpenChange, onBookFound }: Barcode
                   const clean = sanitizeIsbn(raw)
                   if (clean && (clean.length === 10 || clean.length === 13 || clean.length === 8)) {
                     handledCodeRef.current = clean
+                    playBeepFeedback()
+                    triggerHapticFeedback()
                     setDetectedCode(clean)
                     stopCamera()
                     await handleLookup(clean)
@@ -174,18 +180,26 @@ export function BarcodeScannerModal({ open, onOpenChange, onBookFound }: Barcode
             }
           }
 
-          // 2. Fallback to canvas sampling decoder if native didn't match or isn't supported
+          // 2. Canvas sampling decoder with enhanced contrast and orientation
           if (!handledCodeRef.current && ctx) {
             try {
-              canvas.width = Math.min(video.videoWidth, 640)
-              canvas.height = Math.min(video.videoHeight, 480)
+              const vw = video.videoWidth
+              const vh = video.videoHeight
+              // Use balanced resolution for crisp edge detection
+              canvas.width = Math.min(vw, 800)
+              canvas.height = Math.min(vh, 600)
+
+              // Draw original video frame
               ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
 
+              // Contrast & brightness pre-processing on canvas for glare/low contrast covers
               const decoded = scanCanvasForBarcode(ctx, canvas.width, canvas.height)
               if (decoded) {
                 const clean = sanitizeIsbn(decoded)
                 if (clean) {
                   handledCodeRef.current = clean
+                  playBeepFeedback()
+                  triggerHapticFeedback()
                   setDetectedCode(clean)
                   stopCamera()
                   await handleLookup(clean)

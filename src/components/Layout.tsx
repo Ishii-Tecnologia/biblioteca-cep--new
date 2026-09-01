@@ -54,7 +54,13 @@ export default function Layout({ children }: LayoutProps) {
     toggleReaderViewSimulation,
     signOut,
   } = useAuth()
-  const { emprestimosAtivos, reservasAtivas } = useHeaderCounters()
+  const {
+    emprestimosAtivos,
+    reservasAtivas,
+    hasQueueChangeAlert,
+    hasReadyForPickupAlert,
+    clearQueueChangeAlert,
+  } = useHeaderCounters()
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
   const [editPhotoOpen, setEditPhotoOpen] = React.useState(false)
   const [prazoDias, setPrazoDias] = React.useState<number>(15)
@@ -88,6 +94,7 @@ export default function Layout({ children }: LayoutProps) {
       label: 'Reservas',
       icon: BookmarkCheck,
       authRequired: true,
+      hasDot: hasQueueChangeAlert || hasReadyForPickupAlert,
       badge: reservasAtivas > 0 ? `${reservasAtivas}` : undefined,
       badgeVariant: 'warning' as const,
     },
@@ -191,6 +198,9 @@ export default function Layout({ children }: LayoutProps) {
                     key={item.to}
                     to={item.to}
                     end={item.to === '/'}
+                    onClick={() => {
+                      if (item.to === '/reservas') clearQueueChangeAlert()
+                    }}
                     className={({ isActive }) =>
                       `flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative ${
                         isActive
@@ -199,14 +209,21 @@ export default function Layout({ children }: LayoutProps) {
                       }`
                     }
                   >
-                    <Icon className="w-4 h-4" />
+                    <div className="relative">
+                      <Icon className="w-4 h-4" />
+                      {item.hasDot && (
+                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white animate-pulse" />
+                      )}
+                    </div>
                     <span>{item.label}</span>
                     {item.badge && (
                       <span
                         className={`ml-1 text-[10px] font-bold px-1.5 py-0.2 rounded-full ${
-                          item.badgeVariant === 'warning'
-                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                            : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          item.hasDot
+                            ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                            : item.badgeVariant === 'warning'
+                              ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                         }`}
                       >
                         {item.badge}
@@ -375,15 +392,18 @@ export default function Layout({ children }: LayoutProps) {
                 </div>
               )}
 
-              {/* Mobile hamburger */}
+              {/* Mobile hamburger com ponto indicador de notificação se houver mudança de fila */}
               <Button
                 variant="ghost"
                 size="icon"
-                className="md:hidden text-slate-600"
+                className="md:hidden text-slate-600 relative"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 aria-label="Abrir menu"
               >
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                {(hasQueueChangeAlert || hasReadyForPickupAlert) && !mobileMenuOpen && (
+                  <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white animate-pulse" />
+                )}
               </Button>
             </div>
           </div>
@@ -457,23 +477,49 @@ export default function Layout({ children }: LayoutProps) {
                   </Button>
                 </div>
 
-                {/* Atalho Rápido para Reservas Ativas do Leitor */}
+                {/* Atalho Rápido para Reservas Ativas do Leitor com Badge de Notificação de Mudança de Fila */}
                 <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
                   <Link
                     to="/reservas?status=Ativa&minhas=true"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center justify-between p-2 rounded-lg bg-amber-50 hover:bg-amber-100/80 border border-amber-200/80 text-amber-900 transition-colors"
+                    onClick={() => {
+                      clearQueueChangeAlert()
+                      setMobileMenuOpen(false)
+                    }}
+                    className={`flex items-center justify-between p-2 rounded-lg border transition-colors relative ${
+                      hasReadyForPickupAlert
+                        ? 'bg-emerald-100 border-emerald-300 text-emerald-950 font-bold animate-pulse'
+                        : hasQueueChangeAlert
+                          ? 'bg-amber-100 border-amber-300 text-amber-950 font-bold'
+                          : 'bg-amber-50 hover:bg-amber-100/80 border-amber-200/80 text-amber-900'
+                    }`}
                     title="Ver minhas reservas ativas na fila"
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <BookmarkCheck className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                      <div className="relative">
+                        <BookmarkCheck
+                          className={`w-3.5 h-3.5 shrink-0 ${
+                            hasReadyForPickupAlert ? 'text-emerald-700' : 'text-amber-700'
+                          }`}
+                        />
+                        {(hasQueueChangeAlert || hasReadyForPickupAlert) && (
+                          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-rose-500 ring-1 ring-white animate-pulse" />
+                        )}
+                      </div>
                       <span className="text-xs font-semibold truncate">Minhas Reservas</span>
                     </div>
-                    {reservasAtivas > 0 && (
+                    {hasReadyForPickupAlert ? (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-600 text-white rounded-full shrink-0 shadow-2xs">
+                        PRONTO!
+                      </span>
+                    ) : hasQueueChangeAlert ? (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 bg-rose-500 text-white rounded-full shrink-0 shadow-2xs">
+                        NOVO!
+                      </span>
+                    ) : reservasAtivas > 0 ? (
                       <span className="text-[10px] font-bold px-1.5 py-0.2 bg-amber-200/90 text-amber-900 rounded-full shrink-0">
                         {reservasAtivas}
                       </span>
-                    )}
+                    ) : null}
                   </Link>
 
                   <Link
@@ -523,7 +569,10 @@ export default function Layout({ children }: LayoutProps) {
                     key={item.to}
                     to={item.to}
                     end={item.to === '/'}
-                    onClick={() => setMobileMenuOpen(false)}
+                    onClick={() => {
+                      if (item.to === '/reservas') clearQueueChangeAlert()
+                      setMobileMenuOpen(false)
+                    }}
                     className={({ isActive }) =>
                       `flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium ${
                         isActive
@@ -533,14 +582,23 @@ export default function Layout({ children }: LayoutProps) {
                     }
                   >
                     <div className="flex items-center gap-3">
-                      <Icon className="w-4 h-4" />
+                      <div className="relative">
+                        <Icon className="w-4 h-4" />
+                        {item.hasDot && (
+                          <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white animate-pulse" />
+                        )}
+                      </div>
                       <span>{item.label}</span>
                     </div>
-                    {item.badge && (
+                    {item.hasDot ? (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-rose-500 text-white rounded-full">
+                        Mudança na Fila
+                      </span>
+                    ) : item.badge ? (
                       <Badge variant="secondary" className="text-[10px]">
                         {item.badge}
                       </Badge>
-                    )}
+                    ) : null}
                   </NavLink>
                 )
               })}

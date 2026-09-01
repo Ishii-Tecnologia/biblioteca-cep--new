@@ -79,6 +79,15 @@ const DEFAULT_PARAMS = {
     min: 1,
     max: 30,
   },
+  tempo_reserva_garantida_horas: {
+    defaultValue: '24',
+    label: 'Tempo de Reserva Garantida (Horas)',
+    description:
+      'Janela de horas em que o livro fica reservado com exclusividade para o leitor após ser liberado / devolvido.',
+    type: 'number' as const,
+    min: 1,
+    max: 168,
+  },
   label_estrutura_espirito_medium: {
     defaultValue: 'Espírito + Médium',
     label: 'Rótulo da Estrutura: Espírito + Médium',
@@ -129,6 +138,9 @@ export default function Configuracoes() {
   const [prazoReservaDias, setPrazoReservaDias] = useState(
     DEFAULT_PARAMS.prazo_reserva_dias.defaultValue,
   )
+  const [tempoReservaGarantidaHoras, setTempoReservaGarantidaHoras] = useState(
+    DEFAULT_PARAMS.tempo_reserva_garantida_horas.defaultValue,
+  )
   const [nomeBiblioteca, setNomeBiblioteca] = useState(DEFAULT_PARAMS.nome_biblioteca.defaultValue)
   const [labelEspiritoMedium, setLabelEspiritoMedium] = useState(
     DEFAULT_PARAMS.label_estrutura_espirito_medium.defaultValue,
@@ -170,6 +182,10 @@ export default function Configuracoes() {
 
         if (paramMap.has('prazo_reserva_dias')) {
           setPrazoReservaDias(paramMap.get('prazo_reserva_dias')!)
+        }
+
+        if (paramMap.has('tempo_reserva_garantida_horas')) {
+          setTempoReservaGarantidaHoras(paramMap.get('tempo_reserva_garantida_horas')!)
         }
 
         if (paramMap.has('nome_biblioteca')) {
@@ -362,6 +378,13 @@ export default function Configuracoes() {
         descricao: DEFAULT_PARAMS.prazo_reserva_dias.description,
       },
       {
+        chave: 'tempo_reserva_garantida_horas',
+        valor: String(
+          tempoReservaGarantidaHoras || DEFAULT_PARAMS.tempo_reserva_garantida_horas.defaultValue,
+        ),
+        descricao: DEFAULT_PARAMS.tempo_reserva_garantida_horas.description,
+      },
+      {
         chave: 'nome_biblioteca',
         valor: String(nomeBiblioteca || DEFAULT_PARAMS.nome_biblioteca.defaultValue).trim(),
         descricao: DEFAULT_PARAMS.nome_biblioteca.description,
@@ -412,6 +435,7 @@ export default function Configuracoes() {
     setMaxRenovacoes(DEFAULT_PARAMS.max_renovacoes.defaultValue)
     setMaxExemplaresPorLeitor(DEFAULT_PARAMS.max_exemplares_por_leitor.defaultValue)
     setPrazoReservaDias(DEFAULT_PARAMS.prazo_reserva_dias.defaultValue)
+    setTempoReservaGarantidaHoras(DEFAULT_PARAMS.tempo_reserva_garantida_horas.defaultValue)
     setNomeBiblioteca(DEFAULT_PARAMS.nome_biblioteca.defaultValue)
     setLabelEspiritoMedium(DEFAULT_PARAMS.label_estrutura_espirito_medium.defaultValue)
     setLabelConvencional(DEFAULT_PARAMS.label_estrutura_convencional.defaultValue)
@@ -762,6 +786,32 @@ export default function Configuracoes() {
                   <p className="text-[11px] text-slate-500">
                     Padrão: <span className="font-semibold text-slate-700">5 dias</span> de
                     tolerância.
+                  </p>
+                </div>
+
+                {/* Tempo de Reserva Garantida (Horas) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label
+                      htmlFor="tempo_reserva_garantida_horas"
+                      className="text-xs font-semibold text-slate-700"
+                    >
+                      {DEFAULT_PARAMS.tempo_reserva_garantida_horas.label}
+                    </Label>
+                  </div>
+                  <Input
+                    id="tempo_reserva_garantida_horas"
+                    type="number"
+                    min={DEFAULT_PARAMS.tempo_reserva_garantida_horas.min}
+                    max={DEFAULT_PARAMS.tempo_reserva_garantida_horas.max}
+                    value={tempoReservaGarantidaHoras}
+                    onChange={(e) => setTempoReservaGarantidaHoras(e.target.value)}
+                    disabled={!isAdmin || saving}
+                    className="text-sm font-medium font-mono"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Padrão: <span className="font-semibold text-slate-700">24 horas</span>{' '}
+                    garantidas após notificação de disponibilidade para retirada na biblioteca.
                   </p>
                 </div>
               </div>
