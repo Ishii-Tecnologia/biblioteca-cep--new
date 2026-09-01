@@ -361,8 +361,65 @@ export default function Layout({ children }: LayoutProps) {
 
         {/* Mobile Navigation Panel */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-slate-200 bg-white px-4 pt-2 pb-4 space-y-1">
-            <div className="flex items-center gap-2 py-2 border-b border-slate-100 mb-2">
+          <div className="md:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-5 space-y-3 animate-in slide-in-from-top-2 duration-200 shadow-lg">
+            {/* User Profile Card inside Mobile Drawer */}
+            {user ? (
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar className="w-10 h-10 border-2 border-emerald-500/20 shadow-xs shrink-0">
+                    {profile?.avatar_url ? (
+                      <AvatarImage
+                        src={profile.avatar_url}
+                        alt={profile.full_name || 'Foto de perfil'}
+                        className="object-cover"
+                      />
+                    ) : null}
+                    <AvatarFallback className="bg-emerald-100 text-emerald-800 font-bold text-sm">
+                      {getInitials(profile?.full_name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm font-bold text-slate-900 truncate">
+                      {profile?.full_name ||
+                        user.user_metadata?.full_name ||
+                        user.user_metadata?.nome ||
+                        user.email?.split('@')[0] ||
+                        'Usuário'}
+                    </span>
+                    <span className="text-xs text-slate-500 truncate">{user.email}</span>
+                    <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md w-fit">
+                      <Shield className="w-3 h-3" />
+                      <span>
+                        {isAdmin ? 'Administrador' : isOperadorOrAdmin ? 'Operador' : 'Leitor'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-3">
+                <div className="text-xs text-slate-600">
+                  <p className="font-semibold text-slate-800">Bem-vindo(a) à Biblioteca CEP</p>
+                  <p className="text-[11px] text-slate-500">
+                    Faça login para gerenciar empréstimos e reservas
+                  </p>
+                </div>
+                <Button
+                  asChild
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-sm shrink-0"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <Link to="/login">
+                    <LogIn className="w-4 h-4" />
+                    <span>Entrar</span>
+                  </Link>
+                </Button>
+              </div>
+            )}
+
+            {/* Badges de Contadores Ativos */}
+            <div className="flex items-center gap-2 py-1 border-b border-slate-100">
               <Badge variant="outline" className="text-xs bg-slate-50 gap-1 text-slate-700">
                 <Repeat className="w-3 h-3 text-blue-600" />
                 {emprestimosAtivos} ativo(s)
@@ -373,37 +430,68 @@ export default function Layout({ children }: LayoutProps) {
               </Badge>
             </div>
 
-            {navItems.map((item) => {
-              if (item.authRequired && !user) return null
-              if (item.adminOnly && !isAdmin) return null
-              if (item.operatorOnly && !isOperadorOrAdmin) return null
-              const Icon = item.icon
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === '/'}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium ${
-                      isActive
-                        ? 'bg-emerald-50 text-emerald-800 font-semibold'
-                        : 'text-slate-600 hover:bg-slate-50'
-                    }`
-                  }
+            {/* Links de navegação */}
+            <div className="space-y-1">
+              {navItems.map((item) => {
+                if (item.authRequired && !user) return null
+                if (item.adminOnly && !isAdmin) return null
+                if (item.operatorOnly && !isOperadorOrAdmin) return null
+                const Icon = item.icon
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.to === '/'}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium ${
+                        isActive
+                          ? 'bg-emerald-50 text-emerald-800 font-semibold'
+                          : 'text-slate-600 hover:bg-slate-50'
+                      }`
+                    }
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className="w-4 h-4" />
+                      <span>{item.label}</span>
+                    </div>
+                    {item.badge && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {item.badge}
+                      </Badge>
+                    )}
+                  </NavLink>
+                )
+              })}
+            </div>
+
+            {/* Ações de Conta no Menu Mobile */}
+            {user && (
+              <div className="pt-2 border-t border-slate-100 space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    setChangePasswordOpen(true)
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left font-medium"
                 >
-                  <div className="flex items-center gap-3">
-                    <Icon className="w-4 h-4" />
-                    <span>{item.label}</span>
-                  </div>
-                  {item.badge && (
-                    <Badge variant="secondary" className="text-[10px]">
-                      {item.badge}
-                    </Badge>
-                  )}
-                </NavLink>
-              )
-            })}
+                  <KeyRound className="w-4 h-4 text-emerald-600" />
+                  <span>Alterar minha senha</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false)
+                    handleSignOut()
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-rose-600 hover:bg-rose-50 transition-colors text-left font-medium"
+                >
+                  <LogOut className="w-4 h-4 text-rose-600" />
+                  <span>Sair da conta</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </header>

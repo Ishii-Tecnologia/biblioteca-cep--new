@@ -58,6 +58,8 @@ export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book,
   const [copyToDelete, setCopyToDelete] = useState<Exemplar | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
+  const { isOperadorOrAdmin } = useAuth()
+
   const loadCopies = async () => {
     if (!book) return
     setLoading(true)
@@ -232,45 +234,47 @@ export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book,
         </DialogHeader>
 
         <div className="flex-1 overflow-y-auto space-y-5 py-2">
-          {/* Formulário para Adicionar Novos Exemplares */}
-          <form
-            onSubmit={handleAddCopies}
-            className="p-4 bg-muted/40 rounded-xl border border-border space-y-3"
-          >
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Plus className="w-3.5 h-3.5" /> Adicionar Novos Exemplares
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">Quantidade</Label>
-                <Input
-                  type="number"
-                  min={1}
-                  max={20}
-                  value={newCopiesQty}
-                  onChange={(e) => setNewCopiesQty(parseInt(e.target.value, 10) || 1)}
-                  className="text-sm"
-                />
+          {/* Formulário para Adicionar Novos Exemplares (Apenas Operador ou Administrador) */}
+          {isOperadorOrAdmin && (
+            <form
+              onSubmit={handleAddCopies}
+              className="p-4 bg-muted/40 rounded-xl border border-border space-y-3"
+            >
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Plus className="w-3.5 h-3.5" /> Adicionar Novos Exemplares
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Quantidade</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={newCopiesQty}
+                    onChange={(e) => setNewCopiesQty(parseInt(e.target.value, 10) || 1)}
+                    className="text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Localização Física</Label>
+                  <Input
+                    value={newCopiesLocation}
+                    onChange={(e) => setNewCopiesLocation(e.target.value)}
+                    placeholder="Ex: Estante A, Gaveta 2"
+                    className="text-sm"
+                  />
+                </div>
+                <Button type="submit" disabled={adding} className="gap-1.5 w-full text-xs h-9">
+                  {adding ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5" />
+                  )}
+                  Adicionar
+                </Button>
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs font-medium">Localização Física</Label>
-                <Input
-                  value={newCopiesLocation}
-                  onChange={(e) => setNewCopiesLocation(e.target.value)}
-                  placeholder="Ex: Estante A, Gaveta 2"
-                  className="text-sm"
-                />
-              </div>
-              <Button type="submit" disabled={adding} className="gap-1.5 w-full text-xs h-9">
-                {adding ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Plus className="w-3.5 h-3.5" />
-                )}
-                Adicionar
-              </Button>
-            </div>
-          </form>
+            </form>
+          )}
 
           {/* Tabela de Exemplares Existentes */}
           <div className="space-y-2">
@@ -390,32 +394,34 @@ export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book,
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleStartEdit(copy)}
-                              className="h-8 px-2.5 text-xs gap-1"
-                              title="Editar status ou localização"
-                            >
-                              <Edit2 className="w-3 h-3" />
-                              Alterar Status
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDeleteCopy(copy)}
-                              disabled={copy.status === 'Emprestado'}
-                              className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                              title={
-                                copy.status === 'Emprestado'
-                                  ? 'Não pode excluir exemplar emprestado'
-                                  : 'Excluir exemplar'
-                              }
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
+                          {isOperadorOrAdmin && (
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleStartEdit(copy)}
+                                className="h-8 px-2.5 text-xs gap-1"
+                                title="Editar status ou localização"
+                              >
+                                <Edit2 className="w-3 h-3" />
+                                Alterar Status
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDeleteCopy(copy)}
+                                disabled={copy.status === 'Emprestado'}
+                                className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                title={
+                                  copy.status === 'Emprestado'
+                                    ? 'Não pode excluir exemplar emprestado'
+                                    : 'Excluir exemplar'
+                                }
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
