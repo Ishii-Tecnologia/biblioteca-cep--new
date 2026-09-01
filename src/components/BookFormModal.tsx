@@ -91,6 +91,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
   const [loadingIsbn, setLoadingIsbn] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [isbnError, setIsbnError] = useState<string | null>(null)
+  const [imageLoadError, setImageLoadError] = useState(false)
   const [isScannerOpen, setIsScannerOpen] = useState(false)
 
   const coverPasteBoxRef = useRef<HTMLDivElement>(null)
@@ -170,6 +171,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       setLocalizacao('Estante Geral')
     }
     setIsbnError(null)
+    setImageLoadError(false)
   }, [bookToEdit, isOpen])
 
   // Se for novo cadastro e categoria estiver vazia quando as categorias carregarem, define a primeira categoria cadastrada
@@ -233,12 +235,16 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       if (meta.editora) setEditora(meta.editora)
       if (meta.ano_publicacao) setAnoPublicacao(meta.ano_publicacao)
       if (meta.sinopse) setSinopse(meta.sinopse)
-      if (meta.capa_url && !capaUrl) setCapaUrl(meta.capa_url)
+      if (meta.capa_url) {
+        setCapaUrl(meta.capa_url)
+      }
       if (meta.categoria && !categoria) setCategoria(meta.categoria)
 
       toast({
         title: 'Dados encontrados!',
-        description: `Metadados preenchidos para "${meta.titulo_de_livro}".`,
+        description: meta.capa_url
+          ? `Metadados e capa preenchidos para "${meta.titulo_de_livro}".`
+          : `Metadados preenchidos para "${meta.titulo_de_livro}".`,
       })
     } catch (err: any) {
       toast({
@@ -257,6 +263,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
     if (!file) return
 
     setUploadingImage(true)
+    setImageLoadError(false)
     try {
       const publicUrl = await uploadImageToStorage(file, 'capas')
       setCapaUrl(publicUrl)
@@ -350,6 +357,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
 
   const processPastedImageBlob = async (file: File) => {
     setUploadingImage(true)
+    setImageLoadError(false)
     try {
       const publicUrl = await uploadImageToStorage(file, 'capas')
       setCapaUrl(publicUrl)
@@ -389,12 +397,16 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
     if (meta.editora) setEditora(meta.editora)
     if (meta.ano_publicacao) setAnoPublicacao(meta.ano_publicacao)
     if (meta.sinopse) setSinopse(meta.sinopse)
-    if (meta.capa_url && !capaUrl) setCapaUrl(meta.capa_url)
+    if (meta.capa_url) {
+      setCapaUrl(meta.capa_url)
+    }
     if (meta.categoria && !categoria) setCategoria(meta.categoria)
 
     toast({
       title: 'Livro identificado!',
-      description: `Código lido com sucesso para "${meta.titulo_de_livro || meta.isbn}".`,
+      description: meta.capa_url
+        ? `Código lido e capa obtida para "${meta.titulo_de_livro || meta.isbn}".`
+        : `Código lido com sucesso para "${meta.titulo_de_livro || meta.isbn}".`,
     })
   }
 
@@ -558,16 +570,21 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
               <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
                 {/* Preview da Capa */}
                 <div className="w-24 h-32 rounded-lg border border-slate-200 bg-white overflow-hidden shrink-0 shadow-xs relative flex items-center justify-center group">
-                  {capaUrl ? (
+                  {capaUrl && !imageLoadError ? (
                     <>
                       <img
                         src={capaUrl}
                         alt="Capa do Livro"
                         className="w-full h-full object-cover"
+                        onError={() => setImageLoadError(true)}
+                        onLoad={() => setImageLoadError(false)}
                       />
                       <button
                         type="button"
-                        onClick={() => setCapaUrl('')}
+                        onClick={() => {
+                          setCapaUrl('')
+                          setImageLoadError(false)
+                        }}
                         title="Remover capa"
                         className="absolute top-1 right-1 p-1 rounded-md bg-black/60 text-white hover:bg-rose-600 transition-colors opacity-0 group-hover:opacity-100"
                       >
@@ -577,7 +594,9 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                   ) : (
                     <div className="flex flex-col items-center justify-center text-slate-400 p-2 text-center">
                       <ImageIcon className="w-8 h-8 mb-1 stroke-1" />
-                      <span className="text-[10px] leading-tight">Sem Capa</span>
+                      <span className="text-[10px] leading-tight">
+                        {imageLoadError ? 'Falha ao carregar' : 'Sem Capa'}
+                      </span>
                     </div>
                   )}
                   {uploadingImage && (
@@ -594,22 +613,30 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                       <ImageIcon className="w-4 h-4 text-emerald-600" />
                       Foto da Capa do Livro
                     </Label>
-                    {capaUrl && (
+                    {capaUrl && !imageLoadError && (
                       <span className="text-[11px] text-emerald-600 font-medium flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3" /> Imagem vinculada
+                      </span>
+                    )}
+                    {capaUrl && imageLoadError && (
+                      <span className="text-[11px] text-amber-600 font-medium flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" /> Link inválido / inacessível
                       </span>
                     )}
                   </div>
 
                   <p className="text-[11px] text-slate-500">
-                    Você pode colar a imagem diretamente com <strong>Ctrl+V</strong>, colar uma URL
-                    ou fazer upload de um arquivo.
+                    A capa é preenchida automaticamente com o ISBN. Você também pode colar com{' '}
+                    <strong>Ctrl+V</strong>, colar uma URL ou fazer upload.
                   </p>
 
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       value={capaUrl}
-                      onChange={(e) => setCapaUrl(e.target.value)}
+                      onChange={(e) => {
+                        setCapaUrl(e.target.value)
+                        setImageLoadError(false)
+                      }}
                       placeholder="https://... ou cole com Ctrl+V"
                       className="text-xs font-mono bg-white flex-1"
                     />

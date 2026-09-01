@@ -156,6 +156,71 @@ export async function fetchBookByIsbn(isbnRaw: string): Promise<BookMetadata> {
   }
   const cleanIsbn = validation.isbn13
 
+  // Função auxiliar interna para buscar capa via Google Books
+  const fetchCoverFromGoogleBooks = async (isbn: string): Promise<string> => {
+    try {
+      let cover = ''
+      const resFiltered = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`)
+      if (resFiltered.ok) {
+        const data = await resFiltered.json()
+        if (data.items && data.items.length > 0) {
+          const volume = data.items[0].volumeInfo || {}
+          cover =
+            volume.imageLinks?.extraLarge ||
+            volume.imageLinks?.large ||
+            volume.imageLinks?.medium ||
+            volume.imageLinks?.thumbnail ||
+            volume.imageLinks?.smallThumbnail ||
+            ''
+        }
+      }
+
+      if (!cover) {
+        const resSimple = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${isbn}`)
+        if (resSimple.ok) {
+          const data = await resSimple.json()
+          if (data.items && data.items.length > 0) {
+            const volume = data.items[0].volumeInfo || {}
+            cover =
+              volume.imageLinks?.extraLarge ||
+              volume.imageLinks?.large ||
+              volume.imageLinks?.medium ||
+              volume.imageLinks?.thumbnail ||
+              volume.imageLinks?.smallThumbnail ||
+              ''
+          }
+        }
+      }
+
+      if (cover) {
+        if (cover.startsWith('http:')) {
+          cover = cover.replace('http:', 'https:')
+        }
+        // Google Books thumbnail URLs sometimes include &edge=curl which can look cropped
+        return cover
+      }
+    } catch (err) {
+      console.warn('Erro ao buscar capa no Google Books:', err)
+    }
+    return ''
+  }
+
+  // Função auxiliar interna para buscar capa via Open Library
+  const fetchCoverFromOpenLibrary = async (isbn: string): Promise<string> => {
+    try {
+      const res = await fetch(`https://openlibrary.org/isbn/${isbn}.json`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.covers && data.covers.length > 0) {
+          return `https://covers.openlibrary.org/b/id/${data.covers[0]}-L.jpg`
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao buscar capa na Open Library:', err)
+    }
+    return ''
+  }
+
   // 1. Tenta BrasilAPI como fonte prioritária (especialmente eficaz para livros nacionais)
   try {
     const res = await fetch(`https://brasilapi.com.br/api/isbn/v1/${cleanIsbn}`)
@@ -180,6 +245,14 @@ export async function fetchBookByIsbn(isbnRaw: string): Promise<BookMetadata> {
         let cover = data.cover_url || ''
         if (cover && cover.startsWith('http:')) {
           cover = cover.replace('http:', 'https:')
+        }
+
+        // Se BrasilAPI não trouxe capa, tenta buscar capa no Google Books e Open Library
+        if (!cover) {
+          cover = await fetchCoverFromGoogleBooks(cleanIsbn)
+        }
+        if (!cover) {
+          cover = await fetchCoverFromOpenLibrary(cleanIsbn)
         }
 
         return {
@@ -228,9 +301,20 @@ export async function fetchBookByIsbn(isbnRaw: string): Promise<BookMetadata> {
         ? parseInt(volume.publishedDate.substring(0, 4), 10)
         : undefined
 
-      let cover = volume.imageLinks?.thumbnail || volume.imageLinks?.smallThumbnail
+      let cover =
+        volume.imageLinks?.extraLarge ||
+        volume.imageLinks?.large ||
+        volume.imageLinks?.medium ||
+        volume.imageLinks?.thumbnail ||
+        volume.imageLinks?.smallThumbnail ||
+        ''
       if (cover && cover.startsWith('http:')) {
         cover = cover.replace('http:', 'https:')
+      }
+
+      // Se o Google Books não tiver capa nesse volume, tenta Open Library
+      if (!cover) {
+        cover = await fetchCoverFromOpenLibrary(cleanIsbn)
       }
 
       const categories =
@@ -293,6 +377,11 @@ export async function fetchBookByIsbn(isbnRaw: string): Promise<BookMetadata> {
         coverUrl = `https://covers.openlibrary.org/b/id/${data.covers[0]}-L.jpg`
       }
 
+      // Se Open Library não tem capa nos metadados, tenta Google Books como último recurso para capa
+      if (!coverUrl) {
+        coverUrl = await fetchCoverFromGoogleBooks(cleanIsbn)
+      }
+
       let description = ''
       if (typeof data.description === 'string') {
         description = data.description
@@ -314,7 +403,6 @@ export async function fetchBookByIsbn(isbnRaw: string): Promise<BookMetadata> {
   } catch (err) {
     console.warn('Erro ao consultar Open Library:', err)
   }
-
   throw new Error(
     `Não foram encontradas informações automáticas para o ISBN "${cleanIsbn}". Você pode preencher os dados manualmente.`,
   )
