@@ -641,7 +641,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                       className="text-xs font-mono bg-white flex-1"
                     />
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                       <Button
                         type="button"
                         variant="outline"
@@ -653,6 +653,28 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                         <ClipboardPaste className="w-3.5 h-3.5 text-emerald-600" />
                         Colar Imagem
                       </Button>
+
+                      <Label
+                        htmlFor="cover-camera-top"
+                        className="cursor-pointer inline-flex items-center justify-center gap-1 px-2.5 h-8 text-xs border border-slate-300 rounded-md bg-white hover:bg-slate-100 text-slate-700 shrink-0"
+                        title="Fotografar capa com a câmera do dispositivo"
+                      >
+                        {uploadingImage ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Camera className="w-3.5 h-3.5 text-emerald-600" />
+                        )}
+                        Câmera
+                      </Label>
+                      <input
+                        id="cover-camera-top"
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                        disabled={uploadingImage}
+                      />
 
                       <Label
                         htmlFor="cover-upload-top"

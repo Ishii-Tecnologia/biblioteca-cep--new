@@ -221,6 +221,77 @@ export async function fetchBookByIsbn(isbnRaw: string): Promise<BookMetadata> {
     return ''
   }
 
+  // Função auxiliar interna para buscar capa por Título e Autor (Fallback Google Books + Open Library)
+  const fetchCoverByTitleAndAuthor = async (title: string, author?: string): Promise<string> => {
+    const cleanTitle = (title || '').trim()
+    const cleanAuthor = (author || '').trim()
+    if (!cleanTitle) return ''
+
+    // 1. Google Books por intitle / inauthor
+    try {
+      let query = `intitle:${encodeURIComponent(cleanTitle)}`
+      if (cleanAuthor) {
+        // Usa o primeiro autor caso venha separado por vírgula
+        const primaryAuthor = cleanAuthor.split(',')[0].trim()
+        if (primaryAuthor) {
+          query += `+inauthor:${encodeURIComponent(primaryAuthor)}`
+        }
+      }
+
+      const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=3`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.items && data.items.length > 0) {
+          for (const item of data.items) {
+            const volume = item.volumeInfo || {}
+            let cover =
+              volume.imageLinks?.extraLarge ||
+              volume.imageLinks?.large ||
+              volume.imageLinks?.medium ||
+              volume.imageLinks?.thumbnail ||
+              volume.imageLinks?.smallThumbnail ||
+              ''
+            if (cover) {
+              if (cover.startsWith('http:')) {
+                cover = cover.replace('http:', 'https:')
+              }
+              return cover
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao buscar capa por título/autor no Google Books:', err)
+    }
+
+    // 2. Open Library Search API
+    try {
+      let olUrl = `https://openlibrary.org/search.json?title=${encodeURIComponent(cleanTitle)}`
+      if (cleanAuthor) {
+        const primaryAuthor = cleanAuthor.split(',')[0].trim()
+        if (primaryAuthor) {
+          olUrl += `&author=${encodeURIComponent(primaryAuthor)}`
+        }
+      }
+      olUrl += `&fields=cover_i,title,author_name&limit=1`
+
+      const resOl = await fetch(olUrl)
+      if (resOl.ok) {
+        const dataOl = await resOl.json()
+        if (dataOl.docs && dataOl.docs.length > 0) {
+          const doc = dataOl.docs[0]
+          if (doc.cover_i) {
+            return `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg`
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao buscar capa por título/autor na Open Library:', err)
+    }
+
+    return ''
+  }
+
   // 1. Tenta BrasilAPI como fonte prioritária (especialmente eficaz para livros nacionais)
   try {
     const res = await fetch(`https://brasilapi.com.br/api/isbn/v1/${cleanIsbn}`)
@@ -247,12 +318,16 @@ export async function fetchBookByIsbn(isbnRaw: string): Promise<BookMetadata> {
           cover = cover.replace('http:', 'https:')
         }
 
-        // Se BrasilAPI não trouxe capa, tenta buscar capa no Google Books e Open Library
+        // Se BrasilAPI não trouxe capa, tenta buscar capa no Google Books e Open Library por ISBN
         if (!cover) {
           cover = await fetchCoverFromGoogleBooks(cleanIsbn)
         }
         if (!cover) {
           cover = await fetchCoverFromOpenLibrary(cleanIsbn)
+        }
+        // Fallback de capa por Título e Autor
+        if (!cover && data.title) {
+          cover = await fetchCoverByTitleAndAuthor(data.title, authors)
         }
 
         return {
@@ -312,9 +387,13 @@ export async function fetchBookByIsbn(isbnRaw: string): Promise<BookMetadata> {
         cover = cover.replace('http:', 'https:')
       }
 
-      // Se o Google Books não tiver capa nesse volume, tenta Open Library
+      // Se o Google Books não tiver capa nesse volume, tenta Open Library por ISBN
       if (!cover) {
         cover = await fetchCoverFromOpenLibrary(cleanIsbn)
+      }
+      // Fallback de capa por Título e Autor
+      if (!cover && volume.title) {
+        cover = await fetchCoverByTitleAndAuthor(volume.title, authors)
       }
 
       const categories =
@@ -377,9 +456,13 @@ export async function fetchBookByIsbn(isbnRaw: string): Promise<BookMetadata> {
         coverUrl = `https://covers.openlibrary.org/b/id/${data.covers[0]}-L.jpg`
       }
 
-      // Se Open Library não tem capa nos metadados, tenta Google Books como último recurso para capa
+      // Se Open Library não tem capa nos metadados, tenta Google Books como último recurso para capa por ISBN
       if (!coverUrl) {
         coverUrl = await fetchCoverFromGoogleBooks(cleanIsbn)
+      }
+      // Fallback de capa por Título e Autor
+      if (!coverUrl && data.title) {
+        coverUrl = await fetchCoverByTitleAndAuthor(data.title, authorName)
       }
 
       let description = ''
