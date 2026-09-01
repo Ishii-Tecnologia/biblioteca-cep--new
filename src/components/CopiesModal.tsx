@@ -24,6 +24,7 @@ import { Plus, Trash2, Edit2, Check, X, Loader2, AlertTriangle, Wrench } from 'l
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
 import { useHeaderCounters } from '@/hooks/use-header-counters'
+import { ConfirmModal } from '@/components/ConfirmModal'
 
 interface CopiesModalProps {
   isOpen: boolean
@@ -51,6 +52,11 @@ export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book,
   const [editLocation, setEditLocation] = useState<string>('')
   const [editObservacao, setEditObservacao] = useState<string>('')
   const [savingEdit, setSavingEdit] = useState(false)
+
+  // Delete confirm state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [copyToDelete, setCopyToDelete] = useState<Exemplar | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const loadCopies = async () => {
     if (!book) return
@@ -147,15 +153,22 @@ export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book,
     }
   }
 
-  const handleDeleteCopy = async (copyId: string) => {
-    if (!confirm(`Deseja realmente remover o exemplar ${copyId}?`)) return
+  const handleDeleteCopy = (copy: Exemplar) => {
+    setCopyToDelete(copy)
+    setDeleteConfirmOpen(true)
+  }
 
+  const executeDeleteCopy = async () => {
+    if (!copyToDelete) return
+    setDeleteLoading(true)
     try {
-      await ExemplaresService.delete(copyId)
+      await ExemplaresService.delete(copyToDelete.id_exemplar)
       toast({
         title: 'Exemplar removido',
-        description: `O exemplar ${copyId} foi excluído.`,
+        description: `O exemplar ${copyToDelete.id_exemplar} foi excluído com sucesso.`,
       })
+      setDeleteConfirmOpen(false)
+      setCopyToDelete(null)
       await loadCopies()
       onUpdate()
       refreshCounters()
@@ -165,6 +178,8 @@ export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book,
         description: err.message,
         variant: 'destructive',
       })
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -389,7 +404,7 @@ export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book,
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => handleDeleteCopy(copy.id_exemplar)}
+                              onClick={() => handleDeleteCopy(copy)}
                               disabled={copy.status === 'Emprestado'}
                               className="h-8 px-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
                               title={
@@ -417,6 +432,30 @@ export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book,
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <ConfirmModal
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title="Excluir Exemplar"
+        description={
+          copyToDelete ? (
+            <div className="space-y-1.5">
+              <p>Deseja realmente excluir o exemplar:</p>
+              <p className="text-rose-600 font-semibold break-words">
+                "{book?.titulo_de_livro || 'Livro'}" — Exemplar {copyToDelete.id_exemplar} (Seq #
+                {copyToDelete.seq})
+              </p>
+              <p className="text-slate-500">Esta ação não pode ser desfeita.</p>
+            </div>
+          ) : (
+            'Tem certeza que deseja excluir este exemplar? Esta ação não pode ser desfeita.'
+          )
+        }
+        confirmLabel="Sim, Excluir Exemplar"
+        variant="destructive"
+        loading={deleteLoading}
+        onConfirm={executeDeleteCopy}
+      />
     </Dialog>
   )
 }

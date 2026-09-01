@@ -305,7 +305,21 @@ export default function Reservas() {
         open={cancelConfirmOpen}
         onOpenChange={setCancelConfirmOpen}
         title="Cancelar Reserva"
-        description={`Deseja realmente cancelar a reserva #${reservaToCancel?.id_reserva} do livro "${reservaToCancel?.titulo?.titulo_de_livro}" para ${reservaToCancel?.leitor?.nome_do_leitor}?`}
+        description={
+          reservaToCancel ? (
+            <div className="space-y-1.5">
+              <p>Deseja realmente cancelar a reserva:</p>
+              <p className="text-rose-600 font-semibold break-words">
+                Reserva #{reservaToCancel.id_reserva} — "
+                {reservaToCancel.titulo?.titulo_de_livro || 'Livro'}" para{' '}
+                {reservaToCancel.leitor?.nome_do_leitor || 'Leitor'}
+              </p>
+              <p className="text-slate-500">Esta ação não pode ser desfeita.</p>
+            </div>
+          ) : (
+            'Tem certeza que deseja cancelar esta reserva? Esta ação não pode ser desfeita.'
+          )
+        }
         confirmLabel="Sim, Cancelar Reserva"
         variant="destructive"
         loading={actionLoadingId === reservaToCancel?.id_reserva}

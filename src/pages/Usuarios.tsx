@@ -606,13 +606,13 @@ export default function Usuarios() {
         title="Excluir Usuário"
         description={
           userToDelete ? (
-            <span>
-              Tem certeza que deseja excluir o usuário{' '}
-              <strong className="text-rose-600 font-bold">
-                {userToDelete.nome || userToDelete.full_name || userToDelete.email}
-              </strong>
-              ? Esta ação removerá o acesso permanentemente e não pode ser desfeita.
-            </span>
+            <div className="space-y-1.5">
+              <p>Deseja realmente excluir o usuário:</p>
+              <p className="text-rose-600 font-semibold break-words">
+                "{userToDelete.nome || userToDelete.full_name || userToDelete.email}"
+              </p>
+              <p className="text-slate-500">Esta ação não pode ser desfeita.</p>
+            </div>
           ) : (
             'Tem certeza que deseja excluir este usuário? Esta ação não pode ser desfeita.'
           )

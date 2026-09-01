@@ -208,7 +208,7 @@ export default function Layout({ children }: LayoutProps) {
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      className="flex items-center gap-2 p-1.5 sm:px-2.5 sm:py-1.5 h-auto rounded-full sm:rounded-lg hover:bg-slate-100 transition-colors border border-transparent hover:border-slate-200"
+                      className="flex items-center gap-2 px-2 py-1.5 h-auto rounded-lg hover:bg-slate-100 transition-colors border border-transparent hover:border-slate-200 max-w-[170px] xs:max-w-[200px] sm:max-w-[240px]"
                       title="Meu Perfil e Configurações de Conta"
                     >
                       <Avatar className="w-8 h-8 border border-slate-200 shadow-2xs shrink-0">
@@ -223,7 +223,7 @@ export default function Layout({ children }: LayoutProps) {
                           {getInitials(profile?.full_name)}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex flex-col text-left pr-1 max-w-[140px] sm:max-w-[180px]">
+                      <div className="flex flex-col text-left min-w-0 pr-0.5">
                         <span className="text-xs font-bold text-slate-900 leading-tight truncate">
                           {profile?.full_name ||
                             user.user_metadata?.full_name ||
@@ -231,7 +231,7 @@ export default function Layout({ children }: LayoutProps) {
                             user.email?.split('@')[0] ||
                             'Usuário'}
                         </span>
-                        <span className="text-[10px] text-emerald-700 font-medium leading-tight">
+                        <span className="text-[10px] text-emerald-700 font-medium leading-tight truncate">
                           {isAdmin ? 'Administrador' : isOperadorOrAdmin ? 'Operador' : 'Leitor'}
                         </span>
                       </div>

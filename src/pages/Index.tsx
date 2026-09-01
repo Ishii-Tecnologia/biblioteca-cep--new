@@ -168,23 +168,13 @@ export default function Index() {
                 <span className="font-semibold text-slate-700">{stats.totalExemplares}</span> cópias
                 físicas totais
               </p>
-              {stats.exemplaresManutencao > 0 ? (
-                <div
-                  className="flex items-center gap-1 text-slate-400/80 font-normal cursor-default select-none opacity-60"
-                  title="Exemplares atualmente em manutenção"
-                >
-                  <Wrench className="w-3 h-3 shrink-0 opacity-70" />
-                  <span>{stats.exemplaresManutencao} em manutenção</span>
-                </div>
-              ) : (
-                <div
-                  className="flex items-center gap-1 text-slate-400/80 font-normal cursor-default select-none opacity-60"
-                  title="Exemplares atualmente em manutenção"
-                >
-                  <Wrench className="w-3 h-3 shrink-0 opacity-70" />
-                  <span>0 em manutenção</span>
-                </div>
-              )}
+              <div
+                className="flex items-center gap-1 text-rose-600/70 dark:text-rose-400/70 font-normal cursor-default select-none"
+                title="Exemplares atualmente em manutenção"
+              >
+                <Wrench className="w-3 h-3 shrink-0 opacity-80" />
+                <span>{stats.exemplaresManutencao} em manutenção</span>
+              </div>
             </div>
           </CardContent>
         </Card>
