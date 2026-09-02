@@ -1026,9 +1026,9 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
             </div>
 
             {/* 5. LINHA: CATEGORIA, EDITORA, ANO */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-start">
+              <div className="space-y-1.5 flex flex-col justify-start">
+                <div className="flex items-center justify-between h-5">
                   <Label className="text-xs font-medium">Categoria</Label>
                   {loadingCategories && (
                     <span className="text-[10px] text-muted-foreground flex items-center gap-1">
@@ -1059,8 +1059,8 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                 </Select>
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Editora</Label>
+              <div className="space-y-1.5 flex flex-col justify-start">
+                <Label className="text-xs font-medium flex items-center h-5">Editora</Label>
                 <Input
                   value={editora}
                   onChange={(e) => setEditora(e.target.value)}
@@ -1069,8 +1069,10 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Ano de Publicação</Label>
+              <div className="space-y-1.5 flex flex-col justify-start">
+                <Label className="text-xs font-medium flex items-center h-5">
+                  Ano de Publicação
+                </Label>
                 <Input
                   type="number"
                   value={anoPublicacao}
