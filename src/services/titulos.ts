@@ -200,6 +200,31 @@ export const TitulosService = {
     return !!data
   },
 
+  /**
+   * Busca um livro pelo ISBN para validação detalhada de duplicidade
+   */
+  async findByIsbn(
+    isbn: string,
+    excludeIdTitulo?: string,
+  ): Promise<{ id_titulo: string; titulo_de_livro: string; autor: string; isbn: string } | null> {
+    const val = normalizeAndValidateIsbn(isbn)
+    const clean = val.valid ? val.isbn13 : isbn.trim()
+    if (!clean) return null
+
+    let q = supabase
+      .from('titulo')
+      .select('id_titulo, titulo_de_livro, autor, isbn')
+      .eq('isbn', clean)
+
+    if (excludeIdTitulo) {
+      q = q.neq('id_titulo', excludeIdTitulo)
+    }
+
+    const { data, error } = await q.maybeSingle()
+    if (error || !data) return null
+    return data
+  },
+
   async create(titulo: TituloInsert, numExemplares = 1, localizacaoPadrao = 'Estante Geral') {
     // F-09: ISBN obrigatório para novos cadastros com validação de formato e unicidade
     if (!titulo.isbn || !titulo.isbn.trim()) {

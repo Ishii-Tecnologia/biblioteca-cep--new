@@ -95,6 +95,13 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
   const [loadingIsbn, setLoadingIsbn] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [isbnError, setIsbnError] = useState<string | null>(null)
+  const [duplicateBook, setDuplicateBook] = useState<{
+    id_titulo: string
+    titulo_de_livro: string
+    autor: string
+    isbn: string
+  } | null>(null)
+  const [checkingDuplicate, setCheckingDuplicate] = useState(false)
   const [imageLoadError, setImageLoadError] = useState(false)
   const [isScannerOpen, setIsScannerOpen] = useState(false)
   const [calculatingCode, setCalculatingCode] = useState(false)
@@ -177,6 +184,8 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       setLocalizacao('Estante Geral')
     }
     setIsbnError(null)
+    setDuplicateBook(null)
+    setCheckingDuplicate(false)
     setImageLoadError(false)
   }, [bookToEdit, isOpen])
 
@@ -236,6 +245,8 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
     setNumExemplares(1)
     setLocalizacao('Estante Geral')
     setIsbnError(null)
+    setDuplicateBook(null)
+    setCheckingDuplicate(false)
     setImageLoadError(false)
 
     // Recalcular código inicial default
@@ -257,19 +268,99 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
     })
   }
 
+  // Verificação assíncrona de duplicidade de ISBN
+  const checkIsbnDuplication = async (
+    rawIsbn: string,
+    excludeId?: string,
+  ): Promise<{
+    isDuplicate: boolean
+    existingBook: { id_titulo: string; titulo_de_livro: string; autor: string; isbn: string } | null
+    formattedIsbn?: string
+  }> => {
+    const val = normalizeAndValidateIsbn(rawIsbn)
+    if (!val.valid) {
+      setDuplicateBook(null)
+      return { isDuplicate: false, existingBook: null }
+    }
+
+    setCheckingDuplicate(true)
+    try {
+      const existing = await TitulosService.findByIsbn(val.isbn13, excludeId)
+      if (existing) {
+        setDuplicateBook(existing)
+        setIsbnError(
+          `Este ISBN já está cadastrado no livro "${existing.titulo_de_livro}" (${existing.id_titulo}).`,
+        )
+        return { isDuplicate: true, existingBook: existing, formattedIsbn: val.isbn13 }
+      } else {
+        setDuplicateBook(null)
+        setIsbnError(null)
+        return { isDuplicate: false, existingBook: null, formattedIsbn: val.isbn13 }
+      }
+    } catch (err) {
+      console.error('Erro ao verificar duplicidade de ISBN:', err)
+      return { isDuplicate: false, existingBook: null }
+    } finally {
+      setCheckingDuplicate(false)
+    }
+  }
+
+  // Efeito com debounce para verificar duplicidade e validar formato enquanto o usuário digita
+  useEffect(() => {
+    if (!isOpen) return
+
+    const trimmed = isbn.trim()
+    if (!trimmed) {
+      setIsbnError(isEditing ? null : 'ISBN é obrigatório para novos cadastros.')
+      setDuplicateBook(null)
+      return
+    }
+
+    const val = normalizeAndValidateIsbn(trimmed)
+    if (!val.valid) {
+      setIsbnError(val.error || 'Formato de ISBN inválido.')
+      setDuplicateBook(null)
+      return
+    }
+
+    // Se válido, agenda verificação de duplicidade no banco
+    let isCurrent = true
+    const timer = setTimeout(async () => {
+      setCheckingDuplicate(true)
+      try {
+        const existing = await TitulosService.findByIsbn(
+          val.isbn13,
+          isEditing && bookToEdit ? bookToEdit.id_titulo : undefined,
+        )
+        if (!isCurrent) return
+
+        if (existing) {
+          setDuplicateBook(existing)
+          setIsbnError(
+            `Este ISBN já está cadastrado no livro "${existing.titulo_de_livro}" (${existing.id_titulo}).`,
+          )
+        } else {
+          setDuplicateBook(null)
+          setIsbnError(null)
+        }
+      } catch (err) {
+        console.error('Erro ao checar duplicidade:', err)
+      } finally {
+        if (isCurrent) {
+          setCheckingDuplicate(false)
+        }
+      }
+    }, 300)
+
+    return () => {
+      isCurrent = false
+      clearTimeout(timer)
+    }
+  }, [isbn, isEditing, bookToEdit, isOpen])
+
   // Validação dinâmica do campo ISBN
   const handleIsbnChange = (val: string) => {
     setIsbn(val)
-    if (!val.trim()) {
-      setIsbnError(isEditing ? null : 'ISBN é obrigatório para novos cadastros.')
-      return
-    }
-    const validation = normalizeAndValidateIsbn(val)
-    if (!validation.valid) {
-      setIsbnError(validation.error || 'Formato de ISBN inválido.')
-    } else {
-      setIsbnError(null)
-    }
   }
 
   // Preenchimento automático via Google Books / Open Library
@@ -452,12 +543,13 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
     }
   }
 
-  // Scanner acionado internamente dentro do modal
-  const handleScanSuccess = (meta: BookMetadata) => {
-    if (meta.isbn) {
-      setIsbn(meta.isbn)
-      handleIsbnChange(meta.isbn)
+  // Scanner acionado internamente dentro do modal (câmera do celular ou leitor)
+  const handleScanSuccess = async (meta: BookMetadata) => {
+    const scannedIsbn = meta.isbn || ''
+    if (scannedIsbn) {
+      setIsbn(scannedIsbn)
     }
+
     if (meta.titulo_de_livro) setTituloDeLivro(meta.titulo_de_livro)
     if (meta.autor) {
       setAutor(meta.autor)
@@ -477,6 +569,23 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       setCapaUrl(meta.capa_url)
     }
     if (meta.categoria && !categoria) setCategoria(meta.categoria)
+
+    // Checar duplicidade imediatamente com o ISBN lido
+    if (scannedIsbn) {
+      const { isDuplicate, existingBook } = await checkIsbnDuplication(
+        scannedIsbn,
+        isEditing && bookToEdit ? bookToEdit.id_titulo : undefined,
+      )
+
+      if (isDuplicate && existingBook) {
+        toast({
+          title: 'Livro já cadastrado no acervo!',
+          description: `O ISBN ${existingBook.isbn || scannedIsbn} já pertence ao livro "${existingBook.titulo_de_livro}" (${existingBook.id_titulo}).`,
+          variant: 'destructive',
+        })
+        return
+      }
+    }
 
     toast({
       title: 'Livro identificado!',
@@ -577,7 +686,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       return
     }
 
-    // Se ISBN foi preenchido, validar rigorosamente
+    // Se ISBN foi preenchido, validar rigorosamente e checar duplicidade
     if (isbn.trim()) {
       const val = normalizeAndValidateIsbn(isbn)
       if (!val.valid) {
@@ -585,6 +694,24 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
         toast({
           title: 'ISBN Inválido',
           description: val.error,
+          variant: 'destructive',
+        })
+        return
+      }
+
+      // Verificação final no envio para garantir que não ocorra colisão de unicidade
+      const existing = await TitulosService.findByIsbn(
+        val.isbn13,
+        isEditing && bookToEdit ? bookToEdit.id_titulo : undefined,
+      )
+      if (existing) {
+        setDuplicateBook(existing)
+        setIsbnError(
+          `Este ISBN já está cadastrado no livro "${existing.titulo_de_livro}" (${existing.id_titulo}).`,
+        )
+        toast({
+          title: 'ISBN já cadastrado no acervo',
+          description: `A obra "${existing.titulo_de_livro}" (${existing.id_titulo}) já está cadastrada com este ISBN. O cadastro foi bloqueado.`,
           variant: 'destructive',
         })
         return
@@ -668,16 +795,55 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
     }
   }
 
+  const isSubmitDisabled =
+    loading || checkingDuplicate || !!duplicateBook || (!isEditing && (!isbn.trim() || !!isbnError))
+
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-6">
+      <Dialog
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (!open) onClose()
+        }}
+      >
+        <DialogContent
+          className="max-w-2xl max-h-[92vh] overflow-y-auto p-6"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
+        >
           <DialogHeader className="pb-2 border-b">
             <DialogTitle className="text-xl flex items-center gap-2">
               <BookOpen className="w-5 h-5 text-emerald-600" />
               {isEditing ? 'Editar Livro no Acervo' : 'Novo Livro no Acervo'}
             </DialogTitle>
           </DialogHeader>
+
+          {/* BANNER DE ALERTA DE ISBN DUPLICADO */}
+          {duplicateBook && (
+            <div className="bg-rose-50 border-2 border-rose-400 text-rose-900 rounded-xl p-4 shadow-xs flex items-start gap-3 animate-in fade-in duration-200">
+              <div className="p-2 bg-rose-100 rounded-lg text-rose-600 shrink-0 mt-0.5">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-bold text-rose-950">
+                    Livro já cadastrado no acervo!
+                  </h4>
+                  <span className="px-2 py-0.5 bg-rose-200 text-rose-900 font-mono font-bold text-xs rounded">
+                    Código: {duplicateBook.id_titulo}
+                  </span>
+                </div>
+                <p className="text-xs text-rose-800 leading-relaxed">
+                  O ISBN <strong>{duplicateBook.isbn || isbn}</strong> já pertence à obra{' '}
+                  <strong className="text-rose-950">"{duplicateBook.titulo_de_livro}"</strong>
+                  {duplicateBook.autor ? ` (Autor: ${duplicateBook.autor})` : ''}.
+                </p>
+                <div className="pt-1 flex items-center gap-2 text-xs font-semibold text-rose-700">
+                  <span>🚫 O botão de cadastro foi bloqueado para evitar duplicidade.</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4 pt-2">
             {/* 1. SEÇÃO DE FOTO DA CAPA NO INÍCIO COM ÁREA PARA COLAR (Ctrl+V) */}
@@ -822,15 +988,29 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
             </div>
 
             {/* 2. ISBN COM BOTÃO "LER CÓDIGO DE BARRAS" INTERNO */}
-            <div className="space-y-1.5 p-3.5 bg-muted/30 rounded-xl border border-border">
+            <div
+              className={`space-y-1.5 p-3.5 rounded-xl border transition-colors ${
+                duplicateBook
+                  ? 'bg-rose-50/50 border-rose-300 ring-1 ring-rose-200'
+                  : 'bg-muted/30 border-border'
+              }`}
+            >
               <div className="flex items-center justify-between">
                 <Label htmlFor="isbn" className="font-semibold text-xs flex items-center gap-1.5">
                   ISBN (10 ou 13 dígitos)
                   <span className="text-rose-500 font-bold">*</span>
                 </Label>
-                <span className="text-[11px] text-muted-foreground">
-                  Obrigatório para novos cadastros
-                </span>
+                <div className="flex items-center gap-2">
+                  {checkingDuplicate && (
+                    <span className="text-[11px] text-amber-700 flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin text-amber-600" /> Checando
+                      duplicidade...
+                    </span>
+                  )}
+                  <span className="text-[11px] text-muted-foreground">
+                    Obrigatório para novos cadastros
+                  </span>
+                </div>
               </div>
 
               <div className="flex gap-2">
@@ -841,13 +1021,25 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                     value={isbn}
                     onChange={(e) => handleIsbnChange(e.target.value)}
                     placeholder="Ex: 9788573286885 ou 8573286889"
-                    className={`text-sm font-mono ${isbnError ? 'border-rose-500 ring-1 ring-rose-500' : ''}`}
+                    className={`text-sm font-mono ${
+                      duplicateBook || (isbn && isbnError)
+                        ? 'border-rose-500 ring-1 ring-rose-500 bg-rose-50/30'
+                        : ''
+                    }`}
                   />
-                  {isbn && !isbnError && (
+                  {checkingDuplicate ? (
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    </div>
+                  ) : duplicateBook ? (
+                    <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-rose-600">
+                      <AlertCircle className="w-4 h-4" />
+                    </div>
+                  ) : isbn && !isbnError ? (
                     <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-emerald-600">
                       <CheckCircle2 className="w-4 h-4" />
                     </div>
-                  )}
+                  ) : null}
                 </div>
 
                 <Button
@@ -867,8 +1059,9 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                   variant="secondary"
                   size="sm"
                   onClick={() => handleFetchIsbn()}
-                  disabled={loadingIsbn || !isbn.trim()}
+                  disabled={loadingIsbn || !isbn.trim() || !!duplicateBook}
                   className="gap-1.5 shrink-0"
+                  title="Buscar metadados e capa nas bases públicas pelo ISBN"
                 >
                   {loadingIsbn ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -879,11 +1072,28 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                 </Button>
               </div>
 
-              {isbnError && (
-                <div className="flex items-center gap-1 text-xs text-rose-600 dark:text-rose-400 mt-1">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>{isbnError}</span>
+              {duplicateBook ? (
+                <div className="flex items-start gap-1.5 text-xs text-rose-700 font-medium mt-1.5 bg-rose-100/70 p-2 rounded-lg border border-rose-200">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span>
+                      Livro já cadastrado:{' '}
+                      <strong className="text-rose-950">"{duplicateBook.titulo_de_livro}"</strong>{' '}
+                      (Código: <strong>{duplicateBook.id_titulo}</strong> | ISBN:{' '}
+                      <strong>{duplicateBook.isbn || isbn}</strong>).
+                    </span>
+                    <span className="block text-[11px] text-rose-800 mt-0.5">
+                      Não é permitido cadastrar obras duplicadas com o mesmo ISBN.
+                    </span>
+                  </div>
                 </div>
+              ) : (
+                isbnError && (
+                  <div className="flex items-center gap-1 text-xs text-rose-600 dark:text-rose-400 mt-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{isbnError}</span>
+                  </div>
+                )
               )}
             </div>
 
@@ -1196,8 +1406,19 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                 </Button>
                 <Button
                   type="submit"
-                  disabled={loading}
-                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  disabled={isSubmitDisabled}
+                  className={`gap-2 text-white font-medium ${
+                    isSubmitDisabled
+                      ? 'bg-slate-300 dark:bg-slate-700 cursor-not-allowed text-slate-500'
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                  title={
+                    duplicateBook
+                      ? 'Cadastro bloqueado: ISBN já existe no acervo.'
+                      : !isbn.trim() && !isEditing
+                        ? 'Preencha o ISBN para cadastrar.'
+                        : undefined
+                  }
                 >
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {isEditing ? 'Salvar Alterações' : 'Cadastrar Livro'}
