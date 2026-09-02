@@ -221,9 +221,16 @@ export const TitulosService = {
     }
 
     let id_titulo = titulo.id_titulo
-    const authorForId = titulo.autor_espiritual || titulo.autor || 'XX'
     if (!id_titulo || !id_titulo.trim()) {
-      id_titulo = await this.generateId(authorForId, titulo.titulo_de_livro)
+      const isSpiritMedium = !!(titulo.autor_espiritual || titulo.autor_mediunico)
+      const { calculateBookCodePrefix, getNextBookCode } = await import('./book-code')
+      const prefix = calculateBookCodePrefix(
+        isSpiritMedium,
+        titulo.autor_mediunico,
+        titulo.autor_espiritual,
+        titulo.autor,
+      )
+      id_titulo = await getNextBookCode(prefix)
     }
 
     // Compor campo autor unificado

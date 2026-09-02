@@ -18,6 +18,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { TitulosService, Titulo, TituloInsert, TituloWithStats } from '@/services/titulos'
+import { AuthorsService } from '@/services/authors'
+import { calculateBookCodePrefix, getNextBookCode } from '@/services/book-code'
 import { CategoriasService } from '@/services/categorias'
 import { fetchBookByIsbn, normalizeAndValidateIsbn, formatAuthorDisplay } from '@/services/isbn'
 import { AuthorCombobox } from '@/components/AuthorCombobox'
@@ -34,6 +36,8 @@ import {
   ClipboardPaste,
   Trash2,
   User,
+  Eraser,
+  RefreshCw,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { uploadImageToStorage } from '@/lib/image-upload'
@@ -93,7 +97,9 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
   const [isbnError, setIsbnError] = useState<string | null>(null)
   const [imageLoadError, setImageLoadError] = useState(false)
   const [isScannerOpen, setIsScannerOpen] = useState(false)
+  const [calculatingCode, setCalculatingCode] = useState(false)
 
+  const isbnInputRef = useRef<HTMLInputElement>(null)
   const coverPasteBoxRef = useRef<HTMLDivElement>(null)
 
   // Carregar categorias dinamicamente da tabela `categorias` (e fallback) e rótulos
@@ -180,6 +186,76 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
       setCategoria(availableCategories[0])
     }
   }, [availableCategories, bookToEdit, isOpen, categoria])
+
+  // Recálculo automático do Código do Livro (somente leitura) para novos cadastros
+  useEffect(() => {
+    if (isEditing) return
+    if (!isOpen) return
+
+    let isMounted = true
+    const timer = setTimeout(async () => {
+      const isMediumistic = authorStructure === 'ESPIRITO_MEDIUM'
+      const prefix = calculateBookCodePrefix(isMediumistic, autorMediunico, autorEspiritual, autor)
+
+      setCalculatingCode(true)
+      try {
+        const nextCode = await getNextBookCode(prefix)
+        if (isMounted) {
+          setIdTitulo(nextCode)
+        }
+      } catch (err) {
+        console.warn('Erro ao calcular código do livro:', err)
+      } finally {
+        if (isMounted) {
+          setCalculatingCode(false)
+        }
+      }
+    }, 250)
+
+    return () => {
+      isMounted = false
+      clearTimeout(timer)
+    }
+  }, [authorStructure, autorEspiritual, autorMediunico, autor, isEditing, isOpen])
+
+  // 1. Botão Limpar Campos: Apaga todos os campos e foca no campo de ISBN
+  const handleClearFields = () => {
+    setIsbn('')
+    setTituloDeLivro('')
+    setAutorEspiritual('')
+    setAutorMediunico('')
+    setAutor('')
+    setAuthorStructure('ESPIRITO_MEDIUM')
+    setEditora('')
+    setAnoPublicacao('')
+    setCategoria(availableCategories.length > 0 ? availableCategories[0] : '')
+    setSinopse('')
+    setCapaUrl('')
+    setVol('')
+    setAtivo(true)
+    setNumExemplares(1)
+    setLocalizacao('Estante Geral')
+    setIsbnError(null)
+    setImageLoadError(false)
+
+    // Recalcular código inicial default
+    const defaultPrefix = calculateBookCodePrefix(true, '', '', '')
+    getNextBookCode(defaultPrefix)
+      .then(setIdTitulo)
+      .catch(() => setIdTitulo('XX-XX001'))
+
+    // Focar no campo de ISBN
+    setTimeout(() => {
+      if (isbnInputRef.current) {
+        isbnInputRef.current.focus()
+      }
+    }, 50)
+
+    toast({
+      title: 'Campos limpos',
+      description: 'Todos os campos do formulário foram reiniciados.',
+    })
+  }
 
   // Validação dinâmica do campo ISBN
   const handleIsbnChange = (val: string) => {
@@ -443,6 +519,50 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
           variant: 'destructive',
         })
         return
+      }
+    }
+
+    // Validação de existência de autor/médium/espírito na lista ao EDITAR livro
+    // (Requisito: Quando um livro existente for editado/atualizado e o autor/médium ou espírito informado não existir mais na lista, o sistema deve solicitar a troca por um nome válido da lista, informando que "o nome do autor/espírito não existe na lista".)
+    if (isEditing) {
+      if (isMediumistic) {
+        if (autorEspiritual.trim()) {
+          const spiritExists = await AuthorsService.existsInList(autorEspiritual, 'ESPIRITO')
+          if (!spiritExists) {
+            toast({
+              title: 'Autor Espiritual inválido',
+              description: `O nome do autor/espírito "${autorEspiritual.trim()}" não existe na lista de espíritos cadastrados. Selecione ou cadastre um nome válido nas Configurações.`,
+              variant: 'destructive',
+            })
+            return
+          }
+        }
+        if (autorMediunico.trim()) {
+          const mediumExists = await AuthorsService.existsInList(autorMediunico, [
+            'MEDIUM',
+            'ENCARNADO',
+          ])
+          if (!mediumExists) {
+            toast({
+              title: 'Médium inválido',
+              description: `O nome do médium "${autorMediunico.trim()}" não existe na lista. Selecione ou cadastre um nome válido nas Configurações.`,
+              variant: 'destructive',
+            })
+            return
+          }
+        }
+      } else {
+        if (autor.trim()) {
+          const authorExists = await AuthorsService.existsInList(autor, ['ENCARNADO', 'MEDIUM'])
+          if (!authorExists) {
+            toast({
+              title: 'Autor inválido',
+              description: `O nome do autor "${autor.trim()}" não existe na lista. Selecione ou cadastre um nome válido nas Configurações.`,
+              variant: 'destructive',
+            })
+            return
+          }
+        }
       }
     }
 
@@ -716,6 +836,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Input
+                    ref={isbnInputRef}
                     id="isbn"
                     value={isbn}
                     onChange={(e) => handleIsbnChange(e.target.value)}
@@ -964,7 +1085,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
               </div>
             </div>
 
-            {/* 6. LINHA: VOLUME E CÓDIGO INTERNO */}
+            {/* 6. LINHA: VOLUME E CÓDIGO DO LIVRO GERADO AUTOMATICAMENTE */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">Volume / Tomo (Opcional)</Label>
@@ -980,22 +1101,34 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
                 />
               </div>
 
-              {!isEditing ? (
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Código do Livro (Opcional)</Label>
-                  <Input
-                    value={idTitulo}
-                    onChange={(e) => setIdTitulo(e.target.value.toUpperCase())}
-                    placeholder="Gerado automaticamente (ex: AL-104)"
-                    className="text-sm font-mono uppercase"
-                  />
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium flex items-center gap-1.5">
+                    Código do Livro
+                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-mono font-medium">
+                      Automático
+                    </span>
+                  </Label>
+                  {calculatingCode && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <RefreshCw className="w-2.5 h-2.5 animate-spin text-emerald-600" />
+                      Gerando...
+                    </span>
+                  )}
                 </div>
-              ) : (
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Código Interno</Label>
-                  <Input value={idTitulo} disabled className="text-sm font-mono bg-muted" />
-                </div>
-              )}
+                <Input
+                  value={idTitulo}
+                  readOnly
+                  disabled
+                  placeholder="Calculado automaticamente..."
+                  className="text-sm font-mono font-bold bg-slate-100/90 text-slate-800 border-slate-300 select-all cursor-not-allowed"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  {!isEditing
+                    ? 'Gerado pelas iniciais dos autores + sequencial único deste prefixo.'
+                    : 'Identificador único do título no acervo.'}
+                </p>
+              </div>
             </div>
 
             {/* 7. SINOPSE */}
@@ -1037,18 +1170,37 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
               </div>
             )}
 
-            <DialogFooter className="pt-4 border-t gap-2">
-              <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-              >
-                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                {isEditing ? 'Salvar Alterações' : 'Cadastrar Livro'}
-              </Button>
+            <DialogFooter className="pt-4 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+              {!isEditing ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleClearFields}
+                  disabled={loading}
+                  className="text-xs border-slate-300 text-slate-700 hover:bg-slate-100 hover:text-rose-600 gap-1.5 self-start"
+                  title="Limpar todos os campos e focar no ISBN"
+                >
+                  <Eraser className="w-4 h-4 text-slate-500" />
+                  Limpar Campos
+                </Button>
+              ) : (
+                <div />
+              )}
+
+              <div className="flex items-center gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {isEditing ? 'Salvar Alterações' : 'Cadastrar Livro'}
+                </Button>
+              </div>
             </DialogFooter>
           </form>
         </DialogContent>

@@ -1,0 +1,150 @@
+/**
+ * Utilitários para geração do Código do Livro (id_titulo) e de Exemplares (id_exemplar)
+ *
+ * Regras:
+ * - Espírito + Médium: Iniciais do Médium (2 letras) + '-' + Iniciais do Espírito (2 letras) + sequencial 3 dígitos (ex: CX-EM001, CX-AL001, DF-MP001)
+ * - Autor Convencional: Iniciais do Autor (2 letras ou mais significativas) + '-' + sequencial 3 dígitos (ex: AK-001)
+ * - Iniciais: Primeira letra de cada palavra significativa do nome, ignorando conectivos ("de", "da", "do", "dos", "das", "e", "del", "di", "d'"). Para nomes de uma única palavra, usar as duas primeiras letras.
+ * - Sequencial por prefixo: Cada prefixo tem sua contagem independente (001, 002, 003...) baseado nos livros já existentes no banco.
+ * - Exemplares: {id_titulo}-{seq} (ex: CX-EM001-1, AK-001-1)
+ */
+
+import { supabase } from '@/lib/supabase/client'
+
+const CONNECTIVES = new Set([
+  'DE',
+  'DA',
+  'DO',
+  'DAS',
+  'DOS',
+  'E',
+  'DEL',
+  'DI',
+  'DU',
+  'DES',
+  'VON',
+  'VAN',
+  'D',
+])
+
+/**
+ * Remove acentos e caracteres não alfabéticos
+ */
+export function removeAccents(str: string): string {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
+}
+
+/**
+ * Extrai as iniciais de um nome de acordo com as regras:
+ * - Ignora conectivos ("de", "da", "do", "dos", "das", "e", etc.)
+ * - Se tiver 1 palavra: 2 primeiras letras (ex: "Emmanuel" -> "EM", "Victor" -> "VI", "X" -> "XX")
+ * - Se tiver 2 ou mais palavras significativas: primeira letra de cada palavra significativa
+ *   (ex: "Chico Xavier" -> "CX", "André Luiz" -> "AL", "Allan Kardec" -> "AK", "Manoel Philomeno de Miranda" -> "MPM" -> primeiras 2 ou todas?)
+ *   Vamos avaliar: se tiver 2 palavras -> 2 letras. Se tiver 3 palavras significativas ("Manoel Philomeno Miranda") -> "MP" no exemplo da spec ("DF-MP001")!
+ *   Spec diz explicitamente:
+ *   - "duas letras maiúsculas das iniciais do nome do Médium + traço + duas letras maiúsculas das iniciais do nome do Espírito + sequencial de 3 dígitos"
+ *   - "Exemplo: Divaldo Franco, Espírito Manoel Philomeno de Miranda -> DF-MP001"
+ */
+export function extractInitials(name: string, maxChars = 2): string {
+  if (!name || !name.trim()) return 'XX'
+
+  const normalized = removeAccents(name).trim()
+  if (!normalized) return 'XX'
+
+  const rawWords = normalized.split(/\s+/).filter(Boolean)
+  const significantWords = rawWords.filter((w) => !CONNECTIVES.has(w.toUpperCase()))
+
+  const words = significantWords.length > 0 ? significantWords : rawWords
+
+  if (words.length === 1) {
+    const single = words[0].toUpperCase()
+    if (single.length >= 2) {
+      return single.substring(0, 2)
+    }
+    return (single + 'X').substring(0, 2)
+  }
+
+  // 2 ou mais palavras: pegar a primeira letra de cada uma até maxChars
+  const letters = words.map((w) => w[0].toUpperCase()).join('')
+  if (letters.length >= maxChars) {
+    return letters.substring(0, maxChars)
+  }
+  return (letters + 'X').substring(0, maxChars)
+}
+
+/**
+ * Calcula o prefixo do código do livro com base na estrutura de autoria:
+ * - Espírito + Médium: {IniciaisMedium}-{IniciaisEspirito} (ex: CX-EM, CX-AL, DF-MP)
+ * - Autor Convencional: {IniciaisAutor}- (ex: AK-)
+ */
+export function calculateBookCodePrefix(
+  isSpiritMedium: boolean,
+  mediumName?: string | null,
+  spiritName?: string | null,
+  conventionalAuthorName?: string | null,
+): string {
+  if (isSpiritMedium) {
+    const medInitials = extractInitials(mediumName || '', 2)
+    const spInitials = extractInitials(spiritName || '', 2)
+    return `${medInitials}-${spInitials}`
+  }
+
+  const authInitials = extractInitials(conventionalAuthorName || '', 2)
+  return `${authInitials}-`
+}
+
+/**
+ * Busca no banco de dados o próximo sequencial de 3 dígitos para um dado prefixo
+ * Prefixos podem ser "CX-EM" ou "AK-" (ou seja, o código completo começa com prefixo + '001')
+ * Para "CX-EM", o código é "CX-EM001". Para "AK-", o código é "AK-001".
+ */
+export async function getNextBookCode(prefix: string): Promise<string> {
+  if (!prefix || !prefix.trim()) {
+    return 'OB-001'
+  }
+
+  const cleanPrefix = prefix.trim().toUpperCase()
+
+  try {
+    // Buscar todos os livros cujo id_titulo comece com o prefixo
+    const { data, error } = await supabase
+      .from('titulo')
+      .select('id_titulo')
+      .ilike('id_titulo', `${cleanPrefix}%`)
+
+    if (error) {
+      console.warn('Erro ao consultar id_titulo para prefixo:', error)
+      return `${cleanPrefix}001`
+    }
+
+    let maxSeq = 0
+
+    if (data && data.length > 0) {
+      for (const row of data) {
+        const id = (row.id_titulo || '').toUpperCase()
+        if (id.startsWith(cleanPrefix)) {
+          // Extrai os dígitos que seguem o prefixo
+          const rest = id.substring(cleanPrefix.length)
+          // Pega os primeiros números antes de qualquer traço (caso seja exemplar ou sufixo)
+          const match = rest.match(/^(\d+)/)
+          if (match) {
+            const num = parseInt(match[1], 10)
+            if (!isNaN(num) && num > maxSeq) {
+              maxSeq = num
+            }
+          }
+        }
+      }
+    }
+
+    const nextSeq = maxSeq + 1
+    const seqPadded = String(nextSeq).padStart(3, '0')
+    return `${cleanPrefix}${seqPadded}`
+  } catch (err) {
+    console.error('Falha ao calcular próximo código do livro:', err)
+    return `${cleanPrefix}001`
+  }
+}

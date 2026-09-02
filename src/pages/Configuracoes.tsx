@@ -31,6 +31,16 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { ConfirmModal } from '@/components/ConfirmModal'
 import { CategoriasService, Categoria } from '@/services/categorias'
+import { AuthorsService, Author, AuthorType, LinkedBook } from '@/services/authors'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { AlertTriangle, UserCheck, Search } from 'lucide-react'
 
 const DEFAULT_PARAMS = {
   nome_biblioteca: {
@@ -123,6 +133,27 @@ export default function Configuracoes() {
   const [deleteCategoryModalOpen, setDeleteCategoryModalOpen] = useState(false)
   const [categoryToDelete, setCategoryToDelete] = useState<Categoria | null>(null)
   const [deletingCategory, setDeletingCategory] = useState(false)
+
+  // Authors CRUD state
+  const [authorsList, setAuthorsList] = useState<Author[]>([])
+  const [loadingAuthors, setLoadingAuthors] = useState(false)
+  const [selectedAuthorTab, setSelectedAuthorTab] = useState<
+    'ALL' | 'MEDIUM_ENCARNADO' | 'ESPIRITO'
+  >('ALL')
+  const [authorSearchTerm, setAuthorSearchTerm] = useState('')
+  const [newAuthorName, setNewAuthorName] = useState('')
+  const [newAuthorType, setNewAuthorType] = useState<AuthorType>('ESPIRITO')
+  const [addingAuthor, setAddingAuthor] = useState(false)
+  const [editingAuthorId, setEditingAuthorId] = useState<string | null>(null)
+  const [editingAuthorName, setEditingAuthorName] = useState('')
+  const [savingAuthorEdit, setSavingAuthorEdit] = useState(false)
+
+  // Delete author state & linked books alert
+  const [authorToDelete, setAuthorToDelete] = useState<Author | null>(null)
+  const [linkedBooksAlert, setLinkedBooksAlert] = useState<LinkedBook[]>([])
+  const [checkingLinkedBooks, setCheckingLinkedBooks] = useState(false)
+  const [deleteAuthorModalOpen, setDeleteAuthorModalOpen] = useState(false)
+  const [deletingAuthor, setDeletingAuthor] = useState(false)
 
   // State values for parameters
   const [prazoEmprestimoDias, setPrazoEmprestimoDias] = useState(
@@ -223,9 +254,22 @@ export default function Configuracoes() {
     }
   }
 
+  const loadAuthors = async () => {
+    setLoadingAuthors(true)
+    try {
+      const data = await AuthorsService.getAll()
+      setAuthorsList(data)
+    } catch (err: any) {
+      console.error('Erro ao carregar lista de autores:', err)
+    } finally {
+      setLoadingAuthors(false)
+    }
+  }
+
   useEffect(() => {
     loadParams()
     loadCategories()
+    loadAuthors()
   }, [])
 
   const handleDownloadTemplateCsv = () => {
@@ -342,6 +386,120 @@ export default function Configuracoes() {
       })
     } finally {
       setDeletingCategory(false)
+    }
+  }
+
+  // Authors handlers
+  const handleAddAuthor = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newAuthorName.trim()) return
+
+    setAddingAuthor(true)
+    try {
+      await AuthorsService.create(newAuthorName, newAuthorType)
+      const typeLabel =
+        newAuthorType === 'ESPIRITO'
+          ? 'Autor Espiritual'
+          : newAuthorType === 'MEDIUM'
+            ? 'Médium'
+            : 'Autor Convencional'
+
+      toast({
+        title: `${typeLabel} adicionado`,
+        description: `"${newAuthorName.trim()}" foi cadastrado com sucesso.`,
+      })
+      setNewAuthorName('')
+      await loadAuthors()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao cadastrar',
+        description: err.message || 'Não foi possível salvar o nome.',
+        variant: 'destructive',
+      })
+    } finally {
+      setAddingAuthor(false)
+    }
+  }
+
+  const handleStartEditAuthor = (author: Author) => {
+    setEditingAuthorId(author.id)
+    setEditingAuthorName(author.name)
+  }
+
+  const handleCancelEditAuthor = () => {
+    setEditingAuthorId(null)
+    setEditingAuthorName('')
+  }
+
+  const handleSaveEditAuthor = async (author: Author) => {
+    if (!editingAuthorName.trim()) {
+      toast({
+        title: 'Nome obrigatório',
+        description: 'O nome não pode ficar em branco.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setSavingAuthorEdit(true)
+    try {
+      await AuthorsService.update(author.id, editingAuthorName)
+      toast({
+        title: 'Registro atualizado',
+        description: `O nome foi alterado para "${editingAuthorName.trim()}".`,
+      })
+      setEditingAuthorId(null)
+      setEditingAuthorName('')
+      await loadAuthors()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao atualizar',
+        description: err.message || 'Não foi possível atualizar o registro.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingAuthorEdit(false)
+    }
+  }
+
+  // Abertura do modal de exclusão com checagem de livros vinculados
+  const handleOpenDeleteAuthor = async (author: Author) => {
+    setAuthorToDelete(author)
+    setCheckingLinkedBooks(true)
+    setLinkedBooksAlert([])
+    setDeleteAuthorModalOpen(true)
+
+    try {
+      const books = await AuthorsService.getLinkedBooks(author.name, author.type)
+      setLinkedBooksAlert(books)
+    } catch (err) {
+      console.warn('Erro ao verificar livros vinculados:', err)
+    } finally {
+      setCheckingLinkedBooks(false)
+    }
+  }
+
+  const handleExecuteDeleteAuthor = async () => {
+    if (!authorToDelete) return
+    setDeletingAuthor(true)
+    try {
+      await AuthorsService.delete(authorToDelete.id)
+      toast({
+        title: 'Nome removido da lista',
+        description: `"${authorToDelete.name}" foi removido da lista gerenciada. O cadastro dos livros existentes foi preservado sem alterações.`,
+      })
+      setDeleteAuthorModalOpen(false)
+      setAuthorToDelete(null)
+      setLinkedBooksAlert([])
+      await loadAuthors()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao excluir',
+        description: err.message || 'Não foi possível remover da lista.',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingAuthor(false)
     }
   }
 
@@ -848,8 +1006,322 @@ export default function Configuracoes() {
             </div>
           )}
 
+          {/* Seção 3. Manutenção de Autores/Médiuns e Autor Espiritual */}
+          <Card className="border-slate-200 bg-white shadow-xs">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Users2 className="w-5 h-5 text-emerald-600" />
+                    Manutenção de Autores, Médiuns & Autores Espirituais
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Gerencie a lista oficial de Autores/Médiuns e Autores Espirituais utilizada nos
+                    formulários do acervo. A exclusão remove o nome da lista ativa sem apagar os
+                    dados dos livros já cadastrados.
+                  </CardDescription>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="w-fit text-xs font-medium text-slate-600 bg-slate-50 border-slate-200"
+                >
+                  {authorsList.length} cadastrados
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Abas de visualização / filtro por tipo */}
+              <Tabs
+                value={selectedAuthorTab}
+                onValueChange={(val: any) => setSelectedAuthorTab(val)}
+                className="w-full"
+              >
+                <TabsList className="grid grid-cols-3 bg-slate-100 p-1 w-full sm:w-auto">
+                  <TabsTrigger value="ALL" className="text-xs">
+                    Todos ({authorsList.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="ESPIRITO" className="text-xs">
+                    <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-500" />
+                    Espíritos ({authorsList.filter((a) => a.type === 'ESPIRITO').length})
+                  </TabsTrigger>
+                  <TabsTrigger value="MEDIUM_ENCARNADO" className="text-xs">
+                    <UserCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                    Autores & Médiuns (
+                    {
+                      authorsList.filter(
+                        (a) => a.type === 'MEDIUM' || a.type === 'ENCARNADO' || a.type === 'OUTRO',
+                      ).length
+                    }
+                    )
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              {/* Formulário de Adicionar Autor / Médium / Espírito */}
+              {isAdmin && (
+                <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-3">
+                  <div className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                    <Plus className="w-4 h-4 text-emerald-600" />
+                    Cadastrar Novo Nome na Lista
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-4">
+                      <Select
+                        value={newAuthorType}
+                        onValueChange={(val: AuthorType) => setNewAuthorType(val)}
+                      >
+                        <SelectTrigger className="text-xs bg-white h-9">
+                          <SelectValue placeholder="Tipo de Autoria" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ESPIRITO" className="text-xs">
+                            <span className="flex items-center gap-1.5 font-medium text-amber-700">
+                              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                              Autor Espiritual (Espírito)
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="MEDIUM" className="text-xs">
+                            <span className="flex items-center gap-1.5 font-medium text-emerald-700">
+                              <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              Médium / Psicografia
+                            </span>
+                          </SelectItem>
+                          <SelectItem value="ENCARNADO" className="text-xs">
+                            <span className="flex items-center gap-1.5 font-medium text-slate-700">
+                              <Users2 className="w-3.5 h-3.5 text-slate-500" />
+                              Autor Convencional
+                            </span>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="sm:col-span-6">
+                      <Input
+                        type="text"
+                        placeholder={
+                          newAuthorType === 'ESPIRITO'
+                            ? 'Ex: Emmanuel, André Luiz, Joanna de Ângelis...'
+                            : newAuthorType === 'MEDIUM'
+                              ? 'Ex: Chico Xavier, Divaldo Franco...'
+                              : 'Ex: Allan Kardec, Léon Denis...'
+                        }
+                        value={newAuthorName}
+                        onChange={(e) => setNewAuthorName(e.target.value)}
+                        disabled={addingAuthor}
+                        className="text-xs bg-white h-9"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleAddAuthor(e)
+                          }
+                        }}
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <Button
+                        type="button"
+                        onClick={handleAddAuthor}
+                        disabled={addingAuthor || !newAuthorName.trim()}
+                        size="sm"
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium gap-1 h-9"
+                      >
+                        {addingAuthor ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5" />
+                        )}
+                        Adicionar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Busca Rápida na Lista */}
+              <div className="relative">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Input
+                  type="text"
+                  placeholder="Pesquisar autor, médium ou espírito por nome..."
+                  value={authorSearchTerm}
+                  onChange={(e) => setAuthorSearchTerm(e.target.value)}
+                  className="pl-9 text-xs bg-white h-8"
+                />
+                {authorSearchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setAuthorSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Lista Filtrada de Autores */}
+              {loadingAuthors ? (
+                <div className="py-8 text-center flex items-center justify-center gap-2 text-xs text-slate-500">
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-600" />
+                  Carregando lista de autores e espíritos...
+                </div>
+              ) : (
+                (() => {
+                  const filtered = authorsList.filter((a) => {
+                    // Filtro de aba
+                    if (selectedAuthorTab === 'ESPIRITO' && a.type !== 'ESPIRITO') return false
+                    if (
+                      selectedAuthorTab === 'MEDIUM_ENCARNADO' &&
+                      a.type !== 'MEDIUM' &&
+                      a.type !== 'ENCARNADO' &&
+                      a.type !== 'OUTRO'
+                    ) {
+                      return false
+                    }
+                    // Filtro de busca
+                    if (authorSearchTerm.trim()) {
+                      return a.name.toLowerCase().includes(authorSearchTerm.trim().toLowerCase())
+                    }
+                    return true
+                  })
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="py-8 text-center text-xs text-slate-400 border border-dashed rounded-lg">
+                        {authorSearchTerm
+                          ? 'Nenhum resultado encontrado para a pesquisa.'
+                          : 'Nenhum autor/espírito cadastrado nesta categoria.'}
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div className="divide-y divide-slate-100 border border-slate-200 rounded-lg overflow-hidden bg-white max-h-96 overflow-y-auto">
+                      {filtered.map((author) => {
+                        const isEditing = editingAuthorId === author.id
+                        const isSpirit = author.type === 'ESPIRITO'
+                        const isMedium = author.type === 'MEDIUM'
+
+                        return (
+                          <div
+                            key={author.id}
+                            className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/70 transition-colors"
+                          >
+                            {isEditing ? (
+                              <div className="flex items-center gap-2 flex-1">
+                                <Input
+                                  type="text"
+                                  value={editingAuthorName}
+                                  onChange={(e) => setEditingAuthorName(e.target.value)}
+                                  disabled={savingAuthorEdit}
+                                  className="text-xs h-8 bg-white"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault()
+                                      handleSaveEditAuthor(author)
+                                    } else if (e.key === 'Escape') {
+                                      handleCancelEditAuthor()
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => handleSaveEditAuthor(author)}
+                                  disabled={savingAuthorEdit || !editingAuthorName.trim()}
+                                  className="h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5"
+                                  title="Salvar alterações"
+                                >
+                                  {savingAuthorEdit ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <Check className="w-3.5 h-3.5" />
+                                  )}
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={handleCancelEditAuthor}
+                                  disabled={savingAuthorEdit}
+                                  className="h-8 text-xs text-slate-500 hover:text-slate-800 px-2"
+                                  title="Cancelar edição"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                {isSpirit ? (
+                                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                                ) : isMedium ? (
+                                  <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                                ) : (
+                                  <Users2 className="w-4 h-4 text-slate-400 shrink-0" />
+                                )}
+                                <span className="font-semibold text-xs text-slate-900 truncate">
+                                  {author.name}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] py-0 px-1.5 font-normal ${
+                                    isSpirit
+                                      ? 'border-amber-200 bg-amber-50 text-amber-800'
+                                      : isMedium
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                        : 'border-slate-200 bg-slate-50 text-slate-600'
+                                  }`}
+                                >
+                                  {isSpirit
+                                    ? 'Espírito'
+                                    : isMedium
+                                      ? 'Médium'
+                                      : 'Autor Convencional'}
+                                </Badge>
+                              </div>
+                            )}
+
+                            {!isEditing && isAdmin && (
+                              <div className="flex items-center gap-1 self-end sm:self-center shrink-0">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleStartEditAuthor(author)}
+                                  className="h-7 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 gap-1 px-2"
+                                  title="Editar nome"
+                                >
+                                  <Edit2 className="w-3 h-3 text-slate-500" />
+                                  Editar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleOpenDeleteAuthor(author)}
+                                  className="h-7 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 gap-1 px-2"
+                                  title="Excluir da lista"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  Excluir
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()
+              )}
+            </CardContent>
+          </Card>
+
           {/* Seção CRUD de Categorias */}
           <Card className="border-slate-200 bg-white shadow-xs">
+            {' '}
             <CardHeader className="pb-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div>
@@ -1098,6 +1570,73 @@ export default function Configuracoes() {
         variant="destructive"
         loading={deletingCategory}
         onConfirm={handleExecuteDeleteCategory}
+      />
+
+      {/* Modal de Confirmação e Alerta de Livros Vinculados ao Excluir Autor/Médium/Espírito */}
+      <ConfirmModal
+        open={deleteAuthorModalOpen}
+        onOpenChange={setDeleteAuthorModalOpen}
+        title="Excluir da Lista de Autores"
+        description={
+          authorToDelete ? (
+            <div className="space-y-3">
+              <p>
+                Tem certeza que deseja remover{' '}
+                <strong className="text-rose-600 font-bold">"{authorToDelete.name}"</strong> da
+                lista de {authorToDelete.type === 'ESPIRITO' ? 'espíritos' : 'autores/médiuns'}?
+              </p>
+
+              {checkingLinkedBooks ? (
+                <div className="flex items-center gap-2 text-xs text-slate-500 py-2">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Verificando livros vinculados no
+                  acervo...
+                </div>
+              ) : linkedBooksAlert.length > 0 ? (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-xs space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-950">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      Atenção: Este nome está sendo utilizado em {linkedBooksAlert.length} livro(s)
+                      cadastrado(s):
+                    </span>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto divide-y divide-amber-200/60 bg-white/80 p-2 rounded border border-amber-200/80">
+                    {linkedBooksAlert.map((book) => (
+                      <div
+                        key={book.id_titulo}
+                        className="py-1 text-[11px] flex items-center justify-between gap-2"
+                      >
+                        <span className="font-medium text-slate-900 truncate">
+                          • {book.titulo_de_livro}
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-500 shrink-0">
+                          [{book.id_titulo}]
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-tight">
+                    <strong>Nota:</strong> A exclusão removerá o nome da lista ativa de sugestões. O
+                    cadastro dos livros existentes <u>NÃO</u> será apagado. Caso um desses livros
+                    seja editado futuramente, o sistema solicitará a escolha de um nome válido da
+                    lista.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Nenhum livro no acervo está vinculado diretamente a este nome no momento.
+                </p>
+              )}
+            </div>
+          ) : (
+            'Tem certeza que deseja excluir?'
+          )
+        }
+        confirmLabel="Sim, Excluir da Lista"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        loading={deletingAuthor}
+        onConfirm={handleExecuteDeleteAuthor}
       />
     </div>
   )
