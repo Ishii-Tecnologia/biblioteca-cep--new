@@ -23,6 +23,9 @@ import {
 import { normalizeAndValidateIsbn, formatAuthorDisplay } from '@/services/isbn'
 import { AuthorsService } from '@/services/authors'
 import { supabase } from '@/lib/supabase/client'
+import { getCsvSeparador } from '@/services/parametros'
+import { downloadBookTemplateCsv } from '@/lib/csv'
+import { calculateBookCodePrefix, BookCodeSequenceTracker } from '@/services/book-code'
 import { HistoricoService } from '@/services/historico'
 
 interface CsvRowParsed {
@@ -95,24 +98,10 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
     onClose()
   }
 
-  // Template CSV para download
-  const handleDownloadTemplate = () => {
-    const csvContent =
-      'isbn;titulo;autor_espiritual;autor_mediunico;autor;editora;ano_publicacao;categoria;sinopse;exemplares;localizacao\n' +
-      '9788573286885;Nosso Lar;André Luiz;Chico Xavier;;FEB;2010;Doutrinário Espírita;A vida no mundo espiritual narrada pelo espírito André Luiz.;2;Estante 1\n' +
-      '9788573286878;O Livro dos Espíritos;;;Allan Kardec;FEB;2015;Obras Básicas;Filosofia e ciência espírita.;3;Estante Central\n' +
-      '9788579450006;Missionários da Luz;André Luiz;Chico Xavier;;FEB;2011;Doutrinário Espírita;Estudo sobre os processos de reencarnação.;1;Estante 2\n'
-
-    // Adiciona BOM UTF-8 para Excel abrir perfeitamente com acentos em português
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', 'template_importacao_acervo_cep.csv')
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+  // Template CSV para download respeitando o separador configurado
+  const handleDownloadTemplate = async () => {
+    const configuredDelimiter = await getCsvSeparador()
+    downloadBookTemplateCsv('template_importacao_acervo_cep.csv', configuredDelimiter)
   }
 
   // Leitura do arquivo tratando encoding UTF-8 com BOM e CP1252 / ISO-8859-1
@@ -149,8 +138,8 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
     })
   }
 
-  // Separar linhas e detectar delimitador (; ou , ou tab)
-  const parseCsvText = (text: string) => {
+  // Separar linhas e detectar delimitador (; ou , ou tab) dando prioridade ao configurado em caso de empate
+  const parseCsvText = (text: string, preferredDelimiter = ';') => {
     // Remover BOM se existir
     const cleanText = text.replace(/^\uFEFF/, '')
     const lines = cleanText
@@ -163,20 +152,35 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
     }
 
     const firstLine = lines[0]
-    let delimiter = ';'
     const semicolonCount = (firstLine.match(/;/g) || []).length
     const commaCount = (firstLine.match(/,/g) || []).length
     const tabCount = (firstLine.match(/\t/g) || []).length
 
-    // Padrão do sistema: ponto e vírgula (;). Em caso de empate ou ambiguidade, ';' é estritamente prioritário.
-    if (semicolonCount > 0 && semicolonCount >= commaCount && semicolonCount >= tabCount) {
-      delimiter = ';'
+    let delimiter = preferredDelimiter
+
+    // Se houver uma contagem claramente dominante
+    const maxCount = Math.max(semicolonCount, commaCount, tabCount)
+    if (maxCount === 0) {
+      delimiter = preferredDelimiter
     } else if (tabCount > semicolonCount && tabCount > commaCount) {
       delimiter = '\t'
-    } else if (commaCount > semicolonCount && commaCount >= tabCount) {
+    } else if (semicolonCount > commaCount && semicolonCount > tabCount) {
+      delimiter = ';'
+    } else if (commaCount > semicolonCount && commaCount > tabCount) {
       delimiter = ','
     } else {
-      delimiter = ';'
+      // Em caso de empate ou ambiguidade, priorizar o separador configurado pelo usuário
+      if (preferredDelimiter === ';' && semicolonCount === maxCount) {
+        delimiter = ';'
+      } else if (preferredDelimiter === ',' && commaCount === maxCount) {
+        delimiter = ','
+      } else if (semicolonCount > 0 && semicolonCount >= commaCount) {
+        delimiter = ';'
+      } else if (commaCount > 0) {
+        delimiter = ','
+      } else {
+        delimiter = preferredDelimiter
+      }
     }
 
     const parseLine = (line: string): string[] => {
@@ -247,8 +251,9 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
       })
       setExistingIsbns(dbIsbns)
 
+      const configuredDelimiter = await getCsvSeparador()
       const text = await readFileWithEncodings(selectedFile)
-      const { rawRows } = parseCsvText(text)
+      const { rawRows } = parseCsvText(text, configuredDelimiter)
 
       const seenFileIsbns = new Set<string>()
       const rows: CsvRowParsed[] = []
@@ -377,6 +382,8 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
     let totalCopiesCreated = 0
     let errorCount = 0
 
+    const codeTracker = new BookCodeSequenceTracker()
+
     try {
       for (const row of validRows) {
         try {
@@ -391,15 +398,19 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
             await AuthorsService.findOrCreate(row.autor, 'ENCARNADO').catch(() => {})
           }
 
-          // 2. Gerar ID do título
-          const authorForCode = row.autor_espiritual || row.autor_mediunico || row.autor || 'XX'
-          const cleanAuthor = authorForCode.replace(/[^a-zA-Z]/g, '').toUpperCase()
-          const code =
-            cleanAuthor.length >= 2
-              ? cleanAuthor.substring(0, 2)
-              : (cleanAuthor + 'XX').substring(0, 2)
-          const randomNum = Math.floor(100 + Math.random() * 900)
-          const id_titulo = `${code}-${randomNum}`
+          // 2. Gerar Código do Livro (id_titulo) seguindo a MESMA regra do cadastro manual
+          // - Espírito + Médium: Iniciais do Médium + traço + Iniciais do Espírito + sequencial 3 dígitos (ex: CX-EM001)
+          // - Autor Convencional: Iniciais do Autor + traço + sequencial 3 dígitos (ex: AK-001)
+          const isSpiritMedium = !!(row.autor_espiritual || row.autor_mediunico)
+          const prefix = calculateBookCodePrefix(
+            isSpiritMedium,
+            row.autor_mediunico,
+            row.autor_espiritual,
+            row.autor,
+          )
+
+          // Obter próximo sequencial independente por prefixo, garantindo contagem única sem repetições
+          const id_titulo = await codeTracker.nextCode(prefix)
 
           const autorFormatado = formatAuthorDisplay(
             row.autor_espiritual,
@@ -429,7 +440,7 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
 
           if (titErr) throw titErr
 
-          // 4. Inserir exemplares
+          // 4. Inserir exemplares gerados (código do exemplar = código do livro + traço + seq, ex: CX-EM001-1)
           const exemplaresToInsert = []
           for (let seq = 1; seq <= row.exemplares; seq++) {
             exemplaresToInsert.push({
@@ -447,7 +458,7 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
           successCount++
           totalCopiesCreated += row.exemplares
           logs.push(
-            `[Linha ${row.rowNumber}] Cadastrado: "${row.titulo}" (ID: ${newTitulo.id_titulo}, ${row.exemplares} ex.)`,
+            `[Linha ${row.rowNumber}] Cadastrado: "${row.titulo}" (Código: ${newTitulo.id_titulo}, ${row.exemplares} exemplar(es): ${newTitulo.id_titulo}-1${row.exemplares > 1 ? ` a ${newTitulo.id_titulo}-${row.exemplares}` : ''})`,
           )
         } catch (itemErr: any) {
           errorCount++

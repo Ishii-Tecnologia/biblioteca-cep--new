@@ -72,9 +72,71 @@ export function extractInitials(name: string, maxChars = 2): string {
   if (letters.length >= maxChars) {
     return letters.substring(0, maxChars)
   }
-  return (letters + 'X').substring(0, maxChars)
+  return (letters + 'X'.repeat(maxChars)).substring(0, maxChars)
 }
 
+/**
+ * Mantém o controle de contadores de sequenciais em memória (útil para importações em lote)
+ */
+export class BookCodeSequenceTracker {
+  private prefixCounts: Map<string, number> = new Map()
+
+  /**
+   * Inicializa o tracker para um prefixo consultando o maior sequencial existente no banco
+   */
+  async initPrefix(prefix: string): Promise<number> {
+    const cleanPrefix = (prefix || 'OB-').trim().toUpperCase()
+    if (this.prefixCounts.has(cleanPrefix)) {
+      return this.prefixCounts.get(cleanPrefix)!
+    }
+
+    let maxSeq = 0
+    try {
+      const { data, error } = await supabase
+        .from('titulo')
+        .select('id_titulo')
+        .ilike('id_titulo', `${cleanPrefix}%`)
+
+      if (!error && data && data.length > 0) {
+        for (const row of data) {
+          const id = (row.id_titulo || '').toUpperCase()
+          if (id.startsWith(cleanPrefix)) {
+            const rest = id.substring(cleanPrefix.length)
+            const match = rest.match(/^(\d+)/)
+            if (match) {
+              const num = parseInt(match[1], 10)
+              if (!isNaN(num) && num > maxSeq) {
+                maxSeq = num
+              }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Erro ao inicializar prefixo no tracker:', err)
+    }
+
+    this.prefixCounts.set(cleanPrefix, maxSeq)
+    return maxSeq
+  }
+
+  /**
+   * Obtém o próximo código sequencial para um prefixo e incrementa o contador local
+   */
+  async nextCode(prefix: string): Promise<string> {
+    const cleanPrefix = (prefix || 'OB-').trim().toUpperCase()
+    if (!this.prefixCounts.has(cleanPrefix)) {
+      await this.initPrefix(cleanPrefix)
+    }
+
+    const current = this.prefixCounts.get(cleanPrefix) || 0
+    const next = current + 1
+    this.prefixCounts.set(cleanPrefix, next)
+
+    const seqPadded = String(next).padStart(3, '0')
+    return `${cleanPrefix}${seqPadded}`
+  }
+}
 /**
  * Calcula o prefixo do código do livro com base na estrutura de autoria:
  * - Espírito + Médium: {IniciaisMedium}-{IniciaisEspirito} (ex: CX-EM, CX-AL, DF-MP)

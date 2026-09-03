@@ -9,9 +9,9 @@
 export const CSV_DELIMITER = ';'
 
 /**
- * Escapa e formata um valor individual para inclusão em CSV usando ponto e vírgula como separador.
+ * Escapa e formata um valor individual para inclusão em CSV usando o delimitador especificado.
  * Regras:
- * - Se o valor contiver o separador (;), quebras de linha (\n ou \r) ou aspas ("),
+ * - Se o valor contiver o separador (delimiter), quebras de linha (\n ou \r) ou aspas ("),
  *   o valor deve ser envolvido em aspas duplas e quaisquer aspas internas devem ser duplicadas ("").
  * - Se for nulo ou indefinido, retorna string vazia.
  */
@@ -38,7 +38,7 @@ export function formatCsvField(val: unknown, delimiter = CSV_DELIMITER): string 
 export function generateCsvContent<T extends Record<string, unknown>>(
   data: T[],
   customHeaders?: { key: keyof T; label: string }[],
-  delimiter = CSV_DELIMITER,
+  delimiter: string = CSV_DELIMITER,
 ): string {
   if (!data || data.length === 0) {
     return ''
@@ -95,7 +95,7 @@ export function exportToCsv<T extends Record<string, unknown>>(
   data: T[],
   filename: string,
   customHeaders?: { key: keyof T; label: string }[],
-  delimiter = CSV_DELIMITER,
+  delimiter: string = CSV_DELIMITER,
 ): boolean {
   if (!data || data.length === 0) {
     return false
@@ -104,4 +104,85 @@ export function exportToCsv<T extends Record<string, unknown>>(
   const csvContent = generateCsvContent(data, customHeaders, delimiter)
   downloadCsvFile(csvContent, filename)
   return true
+}
+
+/**
+ * Gera o conteúdo do template oficial de importação do acervo de acordo com o separador configurado.
+ */
+export function generateBookTemplateCsv(delimiter = CSV_DELIMITER): string {
+  const headers = [
+    'isbn',
+    'titulo',
+    'autor_espiritual',
+    'autor_mediunico',
+    'autor',
+    'editora',
+    'ano_publicacao',
+    'categoria',
+    'sinopse',
+    'exemplares',
+    'localizacao',
+  ]
+
+  const examples = [
+    {
+      isbn: '9788573286885',
+      titulo: 'Nosso Lar',
+      autor_espiritual: 'André Luiz',
+      autor_mediunico: 'Chico Xavier',
+      autor: '',
+      editora: 'FEB',
+      ano_publicacao: '2010',
+      categoria: 'Doutrinário Espírita',
+      sinopse: 'A vida no mundo espiritual narrada pelo espírito André Luiz.',
+      exemplares: '2',
+      localizacao: 'Estante 1',
+    },
+    {
+      isbn: '9788573286878',
+      titulo: 'O Livro dos Espíritos',
+      autor_espiritual: '',
+      autor_mediunico: '',
+      autor: 'Allan Kardec',
+      editora: 'FEB',
+      ano_publicacao: '2015',
+      categoria: 'Obras Básicas',
+      sinopse: 'Filosofia e ciência espírita.',
+      exemplares: '3',
+      localizacao: 'Estante Central',
+    },
+    {
+      isbn: '9788579450006',
+      titulo: 'Missionários da Luz',
+      autor_espiritual: 'André Luiz',
+      autor_mediunico: 'Chico Xavier',
+      autor: '',
+      editora: 'FEB',
+      ano_publicacao: '2011',
+      categoria: 'Doutrinário Espírita',
+      sinopse: 'Estudo sobre os processos de reencarnação.',
+      exemplares: '1',
+      localizacao: 'Estante 2',
+    },
+  ]
+
+  const headerLine = headers.map((h) => formatCsvField(h, delimiter)).join(delimiter)
+  const dataLines = examples.map((ex) =>
+    headers
+      .map((h) => formatCsvField((ex as Record<string, string>)[h], delimiter))
+      .join(delimiter),
+  )
+
+  return [headerLine, ...dataLines].join('\r\n')
+}
+
+/**
+ * Faz download do arquivo de template oficial de importação do acervo no formato CSV.
+ */
+export function downloadBookTemplateCsv(
+  filename = 'template_importacao_acervo_cep.csv',
+  delimiter = CSV_DELIMITER,
+): void {
+  const content = generateBookTemplateCsv(delimiter)
+  downloadCsvFile(content, filename)
 }

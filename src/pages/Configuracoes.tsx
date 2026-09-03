@@ -23,6 +23,7 @@ import {
   FileSpreadsheet,
   Download,
   Users2,
+  Split,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -41,6 +42,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { AlertTriangle, UserCheck, Search } from 'lucide-react'
+import { downloadBookTemplateCsv } from '@/lib/csv'
 
 const DEFAULT_PARAMS = {
   nome_biblioteca: {
@@ -112,6 +114,13 @@ const DEFAULT_PARAMS = {
       'Nome personalizado exibido no seletor de autoria para autores encarnados / literatura geral.',
     type: 'text' as const,
   },
+  csv_separador: {
+    defaultValue: ';',
+    label: 'Separador CSV para Exportações e Importações',
+    description:
+      'Delimitador padrão utilizado na geração e leitura de planilhas CSV (ponto e vírgula ou vírgula).',
+    type: 'text' as const,
+  },
 }
 
 export default function Configuracoes() {
@@ -179,6 +188,9 @@ export default function Configuracoes() {
   const [labelConvencional, setLabelConvencional] = useState(
     DEFAULT_PARAMS.label_estrutura_convencional.defaultValue,
   )
+  const [csvSeparador, setCsvSeparador] = useState<';' | ','>(
+    DEFAULT_PARAMS.csv_separador.defaultValue as ';' | ',',
+  )
 
   const loadParams = async () => {
     setLoading(true)
@@ -230,6 +242,11 @@ export default function Configuracoes() {
         if (paramMap.has('label_estrutura_convencional')) {
           setLabelConvencional(paramMap.get('label_estrutura_convencional')!)
         }
+
+        if (paramMap.has('csv_separador')) {
+          const sep = paramMap.get('csv_separador')
+          setCsvSeparador(sep === ',' ? ',' : ';')
+        }
       }
     } catch (err: any) {
       toast({
@@ -273,26 +290,11 @@ export default function Configuracoes() {
   }, [])
 
   const handleDownloadTemplateCsv = () => {
-    const csvContent =
-      'isbn;titulo;autor_espiritual;autor_mediunico;autor;editora;ano_publicacao;categoria;sinopse;exemplares;localizacao\n' +
-      '9788573286885;Nosso Lar;André Luiz;Chico Xavier;;FEB;2010;Doutrinário Espírita;A vida no mundo espiritual narrada pelo espírito André Luiz.;2;Estante 1\n' +
-      '9788573286878;O Livro dos Espíritos;;;Allan Kardec;FEB;2015;Obras Básicas;Filosofia e ciência espírita.;3;Estante Central\n' +
-      '9788579450006;Missionários da Luz;André Luiz;Chico Xavier;;FEB;2011;Doutrinário Espírita;Estudo sobre os processos de reencarnação.;1;Estante 2\n'
-
-    // Adiciona BOM UTF-8 (\uFEFF) para Excel abrir perfeitamente com acentuação em PT-BR
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', 'template_cadastro_livros_cep.csv')
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    downloadBookTemplateCsv('template_cadastro_livros_cep.csv', csvSeparador)
 
     toast({
       title: 'Download iniciado',
-      description: 'Template CSV exportado com sucesso (compatível com Excel e LibreOffice).',
+      description: `Template CSV baixado com separador "${csvSeparador === ';' ? 'ponto e vírgula (;)' : 'vírgula (,)'}".`,
     })
   }
 
@@ -561,6 +563,11 @@ export default function Configuracoes() {
         ).trim(),
         descricao: DEFAULT_PARAMS.label_estrutura_convencional.description,
       },
+      {
+        chave: 'csv_separador',
+        valor: csvSeparador === ',' ? ',' : ';',
+        descricao: DEFAULT_PARAMS.csv_separador.description,
+      },
     ]
 
     try {
@@ -597,6 +604,7 @@ export default function Configuracoes() {
     setNomeBiblioteca(DEFAULT_PARAMS.nome_biblioteca.defaultValue)
     setLabelEspiritoMedium(DEFAULT_PARAMS.label_estrutura_espirito_medium.defaultValue)
     setLabelConvencional(DEFAULT_PARAMS.label_estrutura_convencional.defaultValue)
+    setCsvSeparador(DEFAULT_PARAMS.csv_separador.defaultValue as ';' | ',')
 
     toast({
       title: 'Valores padrão restaurados no formulário',
@@ -765,30 +773,80 @@ export default function Configuracoes() {
             </CardContent>
           </Card>
 
-          {/* Card: Template CSV para Importação em Lote */}
+          {/* Card: Configuração do Formato CSV e Template de Importação */}
           <Card className="border-slate-200 bg-white shadow-xs">
             <CardHeader className="pb-4">
               <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                Template CSV para Cadastro de Livros
+                Arquivos CSV & Modelo de Importação
               </CardTitle>
               <CardDescription className="text-xs">
-                Baixe o modelo oficial em formato CSV com cabeçalhos pré-formatados e exemplos
-                prontos para preenchimento.
+                Configure o delimitador padrão das exportações/importações e baixe o modelo oficial
+                formatado para importação em lote de livros.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {/* Seletor de Separador CSV */}
+              <div className="space-y-2 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <Label
+                    htmlFor="csv_separador"
+                    className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                  >
+                    <Split className="w-3.5 h-3.5 text-emerald-600" />
+                    Separador de Campos CSV (Exportação e Importação)
+                  </Label>
+                  <span className="text-[11px] text-slate-400 font-mono">chave: csv_separador</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <Select
+                    value={csvSeparador}
+                    onValueChange={(val: ';' | ',') => setCsvSeparador(val)}
+                    disabled={!isAdmin || saving}
+                  >
+                    <SelectTrigger id="csv_separador" className="text-xs bg-white h-9 font-medium">
+                      <SelectValue placeholder="Selecione o separador" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value=";" className="text-xs">
+                        <span className="font-semibold">Ponto e vírgula (;)</span> — Padrão Excel
+                        pt-BR / Brasil
+                      </SelectItem>
+                      <SelectItem value="," className="text-xs">
+                        <span className="font-semibold">Vírgula (,)</span> — Padrão Internacional /
+                        RFC 4180
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-center text-[11px] text-slate-500 leading-tight">
+                    {csvSeparador === ';' ? (
+                      <span>
+                        Ponto e vírgula (<strong>;</strong>) é recomendado para computadores
+                        configurados no Brasil, evitando que números decimais se dividam em colunas
+                        no Excel.
+                      </span>
+                    ) : (
+                      <span>
+                        Vírgula (<strong>,</strong>) é o padrão internacional de CSV (valores que
+                        contenham vírgula são automaticamente envolvidos em aspas).
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Download do Template Oficial */}
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-slate-900">
                     Arquivo Modelo de Importação (template_cadastro_livros_cep.csv)
                   </p>
                   <p className="text-[11px] text-slate-500 leading-relaxed max-w-xl">
-                    Contém as colunas:{' '}
+                    Utiliza o separador configurado ({' '}
                     <code className="bg-slate-200/80 px-1 py-0.5 rounded text-[10px] font-mono">
-                      isbn;titulo;autor_espiritual;autor_mediunico;autor;editora;ano_publicacao;categoria;sinopse;exemplares;localizacao
+                      {csvSeparador === ';' ? 'ponto e vírgula (;)' : 'vírgula (,)'}
                     </code>{' '}
-                    com codificação UTF-8 pronta para Excel.
+                    ) e codificação UTF-8 com BOM para Excel e LibreOffice.
                   </p>
                 </div>
                 <Button
@@ -799,7 +857,7 @@ export default function Configuracoes() {
                   className="bg-white hover:bg-emerald-50 border-emerald-600/40 text-emerald-700 hover:text-emerald-800 text-xs font-medium gap-2 shrink-0 shadow-2xs"
                 >
                   <Download className="w-4 h-4" />
-                  Baixar Template CSV
+                  Baixar Template CSV ({csvSeparador === ';' ? ';' : ','})
                 </Button>
               </div>
             </CardContent>

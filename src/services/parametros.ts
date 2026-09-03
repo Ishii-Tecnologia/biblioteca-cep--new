@@ -39,6 +39,15 @@ export async function getTempoReservaGarantidaHoras(): Promise<number> {
   return data ? parseInt(data.valor, 10) : 24
 }
 
+export async function getCsvSeparador(): Promise<string> {
+  const { data } = await supabase
+    .from('parametros')
+    .select('valor')
+    .eq('chave', 'csv_separador')
+    .maybeSingle()
+  return data?.valor === ',' ? ',' : ';'
+}
+
 export const ParametrosService = {
   async getAll() {
     const { data, error } = await supabase.from('parametros').select('*')

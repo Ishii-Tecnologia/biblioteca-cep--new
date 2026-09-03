@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { formatDate, formatDateTime, formatCPF, formatPhone } from '@/lib/utils'
 import { exportToCsv } from '@/lib/csv'
+import { getCsvSeparador } from '@/services/parametros'
 import { DatePickerBR } from '@/components/DatePickerBR'
 import {
   History,
@@ -556,8 +557,8 @@ export default function Historico() {
     }
   }
 
-  // Export CSV helper padronizado com separador ';' e BOM UTF-8
-  const exportCSV = (data: any[], filename: string) => {
+  // Export CSV helper padronizado com separador configurado (default ';' ou ',') e BOM UTF-8
+  const exportCSV = async (data: any[], filename: string) => {
     if (!data.length) {
       toast({
         title: 'Sem dados para exportar',
@@ -566,7 +567,8 @@ export default function Historico() {
       return
     }
 
-    exportToCsv(data, filename)
+    const delimiter = await getCsvSeparador()
+    exportToCsv(data, filename, undefined, delimiter)
   }
 
   // Resumo de exemplares agrupado por categoria
