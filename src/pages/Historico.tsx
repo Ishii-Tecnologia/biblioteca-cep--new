@@ -4,6 +4,7 @@ import { HistoricoService, HistoricoDetailed, MovimentacaoReportItem } from '@/s
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { formatDate, formatDateTime, formatCPF, formatPhone } from '@/lib/utils'
+import { exportToCsv } from '@/lib/csv'
 import { DatePickerBR } from '@/components/DatePickerBR'
 import {
   History,
@@ -555,7 +556,7 @@ export default function Historico() {
     }
   }
 
-  // Export CSV helper
+  // Export CSV helper padronizado com separador ';' e BOM UTF-8
   const exportCSV = (data: any[], filename: string) => {
     if (!data.length) {
       toast({
@@ -564,27 +565,8 @@ export default function Historico() {
       })
       return
     }
-    const headers = Object.keys(data[0])
-    const csvRows = []
-    csvRows.push(headers.join(','))
 
-    for (const row of data) {
-      const values = headers.map((header) => {
-        const val = row[header]
-        const escaped = ('' + (val ?? '')).replace(/"/g, '\\"')
-        return `"${escaped}"`
-      })
-      csvRows.push(values.join(','))
-    }
-
-    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    link.setAttribute('download', `${filename}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    exportToCsv(data, filename)
   }
 
   // Resumo de exemplares agrupado por categoria

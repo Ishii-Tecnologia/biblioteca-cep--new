@@ -168,10 +168,15 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
     const commaCount = (firstLine.match(/,/g) || []).length
     const tabCount = (firstLine.match(/\t/g) || []).length
 
-    if (tabCount > semicolonCount && tabCount > commaCount) {
+    // Padrão do sistema: ponto e vírgula (;). Em caso de empate ou ambiguidade, ';' é estritamente prioritário.
+    if (semicolonCount > 0 && semicolonCount >= commaCount && semicolonCount >= tabCount) {
+      delimiter = ';'
+    } else if (tabCount > semicolonCount && tabCount > commaCount) {
       delimiter = '\t'
-    } else if (commaCount > semicolonCount) {
+    } else if (commaCount > semicolonCount && commaCount >= tabCount) {
       delimiter = ','
+    } else {
+      delimiter = ';'
     }
 
     const parseLine = (line: string): string[] => {
