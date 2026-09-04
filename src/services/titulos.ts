@@ -394,15 +394,15 @@ export const TitulosService = {
       const autorConvencional = hasSpiritualOrMedium ? '' : t.autor || ''
 
       return {
-        isbn: t.isbn || '',
-        titulo: t.titulo_de_livro || '',
-        autor_espiritual: t.autor_espiritual || '',
-        autor_mediunico: t.autor_mediunico || '',
-        autor: autorConvencional,
-        editora: t.editora || '',
-        ano_publicacao: t.ano_publicacao ? String(t.ano_publicacao) : '',
-        categoria: t.categoria || 'Geral',
-        sinopse: t.sinopse || '',
+        isbn: (t.isbn ?? '').trim(),
+        titulo: (t.titulo_de_livro ?? '').trim(),
+        autor_espiritual: (t.autor_espiritual ?? '').trim(),
+        autor_mediunico: (t.autor_mediunico ?? '').trim(),
+        autor: autorConvencional.trim(),
+        editora: (t.editora ?? '').trim(),
+        ano_publicacao: t.ano_publicacao ? String(t.ano_publicacao).trim() : '',
+        categoria: (t.categoria ?? 'Geral').trim(),
+        sinopse: (t.sinopse ?? '').trim(),
         exemplares: exemplaresCount,
         localizacao: firstLoc,
       }

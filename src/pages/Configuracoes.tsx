@@ -292,7 +292,7 @@ export default function Configuracoes() {
   }, [])
 
   const handleDownloadTemplateCsv = () => {
-    downloadBookTemplateCsv('template_cadastro_livros_cep.csv', csvSeparador)
+    downloadBookTemplateCsv('template_importacao_acervo_cep.csv', csvSeparador)
 
     toast({
       title: 'Download iniciado',
@@ -884,7 +884,7 @@ export default function Configuracoes() {
                         <span>Arquivo Modelo de Importação</span>
                       </div>
                       <p className="text-[11px] text-slate-500 font-mono">
-                        template_cadastro_livros_cep.csv
+                        template_importacao_acervo_cep.csv
                       </p>
                       <p className="text-[11px] text-slate-500 leading-snug">
                         Planilha modelo com exemplos ilustrativos para preenchimento de novas obras.
