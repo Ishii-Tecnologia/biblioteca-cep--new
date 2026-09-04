@@ -9,6 +9,41 @@
 export const CSV_DELIMITER = ';'
 
 /**
+ * Cabeçalhos oficiais do arquivo modelo / tabela de cadastro de livros.
+ * Devem coincidir com a estrutura esperada pelo CsvImportModal para garantir
+ * que a exportação da base sirva tanto de backup quanto de reimportação direta.
+ */
+export const BOOK_CSV_HEADERS = [
+  'isbn',
+  'titulo',
+  'autor_espiritual',
+  'autor_mediunico',
+  'autor',
+  'editora',
+  'ano_publicacao',
+  'categoria',
+  'sinopse',
+  'exemplares',
+  'localizacao',
+] as const
+
+export type BookCsvHeaderKey = (typeof BOOK_CSV_HEADERS)[number]
+
+export interface BookCsvExportItem {
+  isbn?: string | null
+  titulo?: string | null
+  autor_espiritual?: string | null
+  autor_mediunico?: string | null
+  autor?: string | null
+  editora?: string | null
+  ano_publicacao?: string | number | null
+  categoria?: string | null
+  sinopse?: string | null
+  exemplares?: string | number | null
+  localizacao?: string | null
+}
+
+/**
  * Escapa e formata um valor individual para inclusão em CSV usando o delimitador especificado.
  * Regras:
  * - Se o valor contiver o separador (delimiter), quebras de linha (\n ou \r) ou aspas ("),
@@ -110,19 +145,7 @@ export function exportToCsv<T extends Record<string, unknown>>(
  * Gera o conteúdo do template oficial de importação do acervo de acordo com o separador configurado.
  */
 export function generateBookTemplateCsv(delimiter = CSV_DELIMITER): string {
-  const headers = [
-    'isbn',
-    'titulo',
-    'autor_espiritual',
-    'autor_mediunico',
-    'autor',
-    'editora',
-    'ano_publicacao',
-    'categoria',
-    'sinopse',
-    'exemplares',
-    'localizacao',
-  ]
+  const headers = BOOK_CSV_HEADERS
 
   const examples = [
     {
@@ -184,5 +207,45 @@ export function downloadBookTemplateCsv(
   delimiter = CSV_DELIMITER,
 ): void {
   const content = generateBookTemplateCsv(delimiter)
+  downloadCsvFile(content, filename)
+}
+
+/**
+ * Gera o conteúdo em CSV com todos os dados da base de livros,
+ * seguindo a mesma ordem de colunas e formatação do template oficial de importação.
+ */
+export function generateBookFullExportCsv(
+  books: BookCsvExportItem[],
+  delimiter = CSV_DELIMITER,
+): string {
+  const headers = BOOK_CSV_HEADERS
+  const headerLine = headers.map((h) => formatCsvField(h, delimiter)).join(delimiter)
+
+  if (!books || books.length === 0) {
+    return headerLine
+  }
+
+  const dataLines = books.map((item) =>
+    headers
+      .map((h) => {
+        const val = item[h]
+        return formatCsvField(val, delimiter)
+      })
+      .join(delimiter),
+  )
+
+  return [headerLine, ...dataLines].join('\r\n')
+}
+
+/**
+ * Faz download do arquivo completo com todos os títulos da base,
+ * com o nome padronizado tabela_cadastro_livros_cep.csv e BOM UTF-8.
+ */
+export function downloadBookFullExportCsv(
+  books: BookCsvExportItem[],
+  filename = 'tabela_cadastro_livros_cep.csv',
+  delimiter = CSV_DELIMITER,
+): void {
+  const content = generateBookFullExportCsv(books, delimiter)
   downloadCsvFile(content, filename)
 }

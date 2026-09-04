@@ -42,7 +42,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { AlertTriangle, UserCheck, Search } from 'lucide-react'
-import { downloadBookTemplateCsv } from '@/lib/csv'
+import { downloadBookTemplateCsv, downloadBookFullExportCsv } from '@/lib/csv'
+import { TitulosService } from '@/services/titulos'
 
 const DEFAULT_PARAMS = {
   nome_biblioteca: {
@@ -130,6 +131,7 @@ export default function Configuracoes() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [runningRoutine, setRunningRoutine] = useState(false)
+  const [exportingFullCsv, setExportingFullCsv] = useState(false)
 
   // Categories CRUD state
   const [categories, setCategories] = useState<Categoria[]>([])
@@ -296,6 +298,27 @@ export default function Configuracoes() {
       title: 'Download iniciado',
       description: `Template CSV baixado com separador "${csvSeparador === ';' ? 'ponto e vírgula (;)' : 'vírgula (,)'}".`,
     })
+  }
+
+  const handleDownloadFullExportCsv = async () => {
+    setExportingFullCsv(true)
+    try {
+      const booksData = await TitulosService.getAllForCsvExport()
+      downloadBookFullExportCsv(booksData, 'tabela_cadastro_livros_cep.csv', csvSeparador)
+
+      toast({
+        title: 'Exportação concluída',
+        description: `Arquivo "tabela_cadastro_livros_cep.csv" gerado com ${booksData.length} título(s) cadastrado(s) e separador "${csvSeparador === ';' ? 'ponto e vírgula (;)' : 'vírgula (,)'}".`,
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Erro na exportação',
+        description: err.message || 'Não foi possível gerar a tabela de livros.',
+        variant: 'destructive',
+      })
+    } finally {
+      setExportingFullCsv(false)
+    }
   }
 
   const handleAddCategory = async (e: React.FormEvent) => {
@@ -835,30 +858,84 @@ export default function Configuracoes() {
                 </div>
               </div>
 
-              {/* Download do Template Oficial */}
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              {/* Downloads: Arquivo Modelo e Base Completa de Livros */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3.5">
                 <div className="space-y-1">
                   <p className="text-xs font-semibold text-slate-900">
-                    Arquivo Modelo de Importação (template_cadastro_livros_cep.csv)
+                    Arquivos CSV de Importação e Exportação do Acervo
                   </p>
-                  <p className="text-[11px] text-slate-500 leading-relaxed max-w-xl">
-                    Utiliza o separador configurado ({' '}
+                  <p className="text-[11px] text-slate-500 leading-relaxed max-w-2xl">
+                    Utilizam o separador configurado ({' '}
                     <code className="bg-slate-200/80 px-1 py-0.5 rounded text-[10px] font-mono">
                       {csvSeparador === ';' ? 'ponto e vírgula (;)' : 'vírgula (,)'}
                     </code>{' '}
-                    ) e codificação UTF-8 com BOM para Excel e LibreOffice.
+                    ) e codificação UTF-8 com BOM (\uFEFF) para compatibilidade nativa com Excel e
+                    LibreOffice pt-BR. Ambos possuem exatamente a mesma estrutura de colunas aceita
+                    pelo importador do sistema.
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  onClick={handleDownloadTemplateCsv}
-                  variant="outline"
-                  size="sm"
-                  className="bg-white hover:bg-emerald-50 border-emerald-600/40 text-emerald-700 hover:text-emerald-800 text-xs font-medium gap-2 shrink-0 shadow-2xs"
-                >
-                  <Download className="w-4 h-4" />
-                  Baixar Template CSV ({csvSeparador === ';' ? ';' : ','})
-                </Button>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  {/* Opção 1: Arquivo Modelo de Importação */}
+                  <div className="p-3 rounded-lg bg-white border border-slate-200 flex flex-col justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>Arquivo Modelo de Importação</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-mono">
+                        template_cadastro_livros_cep.csv
+                      </p>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Planilha modelo com exemplos ilustrativos para preenchimento de novas obras.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={handleDownloadTemplateCsv}
+                      variant="outline"
+                      size="sm"
+                      className="w-full bg-white hover:bg-emerald-50 border-emerald-600/40 text-emerald-700 hover:text-emerald-800 text-xs font-medium gap-2 shadow-2xs h-8"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Baixar Modelo CSV ({csvSeparador === ';' ? ';' : ','})
+                    </Button>
+                  </div>
+
+                  {/* Opção 2: Tabela com a base completa cadastrada */}
+                  <div className="p-3 rounded-lg bg-white border border-slate-200 flex flex-col justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>Base Completa de Títulos Cadastrados</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-mono">
+                        tabela_cadastro_livros_cep.csv
+                      </p>
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Exporta todos os títulos e exemplares do acervo no mesmo formato do modelo,
+                        pronto para backup ou reimportação.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={handleDownloadFullExportCsv}
+                      disabled={exportingFullCsv}
+                      variant="outline"
+                      size="sm"
+                      className="w-full bg-white hover:bg-emerald-50 border-emerald-600/40 text-emerald-700 hover:text-emerald-800 text-xs font-medium gap-2 shadow-2xs h-8"
+                    >
+                      {exportingFullCsv ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Download className="w-3.5 h-3.5" />
+                      )}
+                      {exportingFullCsv
+                        ? 'Exportando títulos...'
+                        : `Baixar tabela_cadastro_livros_cep.csv — base completa de títulos (${csvSeparador === ';' ? ';' : ','})`}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -367,6 +367,48 @@ export const TitulosService = {
     if (error) throw error
   },
 
+  /**
+   * Retorna todos os títulos do acervo com contagem de exemplares e localização representativa,
+   * estruturados no formato de exportação de colunas do template oficial CSV.
+   */
+  async getAllForCsvExport() {
+    const { data, error } = await supabase
+      .from('titulo')
+      .select('*, exemplar(id_exemplar, seq, status, localizacao)')
+      .order('titulo_de_livro', { ascending: true })
+
+    if (error) throw error
+
+    return (data || []).map((t: any) => {
+      const exemplares = t.exemplar || []
+      const exemplaresCount = exemplares.length > 0 ? exemplares.length : 1
+      // Determina localização a partir dos exemplares (o primeiro que tiver preenchido ou 'Estante Geral')
+      const firstLoc =
+        exemplares.find((e: any) => e.localizacao && e.localizacao.trim())?.localizacao?.trim() ||
+        'Estante Geral'
+
+      // Se autor_espiritual ou autor_mediunico estiver preenchido, manter o autor limpo se for apenas autor convencional
+      // No schema: titulo.autor guarda a string completa formatada se mediúnico, ou o nome do autor convencional.
+      // Se tiver autor_espiritual / mediunico, o template usa autor para o encarnado convencional (ou vazio).
+      const hasSpiritualOrMedium = !!(t.autor_espiritual || t.autor_mediunico)
+      const autorConvencional = hasSpiritualOrMedium ? '' : t.autor || ''
+
+      return {
+        isbn: t.isbn || '',
+        titulo: t.titulo_de_livro || '',
+        autor_espiritual: t.autor_espiritual || '',
+        autor_mediunico: t.autor_mediunico || '',
+        autor: autorConvencional,
+        editora: t.editora || '',
+        ano_publicacao: t.ano_publicacao ? String(t.ano_publicacao) : '',
+        categoria: t.categoria || 'Geral',
+        sinopse: t.sinopse || '',
+        exemplares: exemplaresCount,
+        localizacao: firstLoc,
+      }
+    })
+  },
+
   async getCategories(): Promise<string[]> {
     const { data: catData } = await (supabase.from('categorias' as any) as any)
       .select('nome')
