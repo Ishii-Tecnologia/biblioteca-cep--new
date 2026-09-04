@@ -153,9 +153,12 @@ export default function Acervo() {
 
   // Delete confirm modal state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
-  const [bookToDelete, setBookToDelete] = useState<{ id_titulo: string; title: string } | null>(
-    null,
-  )
+  const [bookToDelete, setBookToDelete] = useState<{
+    id_titulo: string
+    title: string
+    total_exemplares?: number
+    exemplares_disponiveis?: number
+  } | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
   const loadBooks = async () => {
@@ -261,8 +264,23 @@ export default function Acervo() {
     setLightboxOpen(true)
   }
 
-  const handleDeleteBook = (id_titulo: string, title: string) => {
-    setBookToDelete({ id_titulo, title })
+  const handleDeleteBook = (book: TituloWithStats) => {
+    // Validação preventiva: todos os exemplares precisam estar disponíveis
+    if (book.total_exemplares > 0 && book.exemplares_disponiveis !== book.total_exemplares) {
+      toast({
+        title: 'Não é possível excluir este título',
+        description: `O livro possui exemplares emprestados ou em manutenção (${book.exemplares_disponiveis} de ${book.total_exemplares} disponíveis). Todos os exemplares devem estar disponíveis.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setBookToDelete({
+      id_titulo: book.id_titulo,
+      title: book.titulo_de_livro,
+      total_exemplares: book.total_exemplares,
+      exemplares_disponiveis: book.exemplares_disponiveis,
+    })
     setDeleteConfirmOpen(true)
   }
 
@@ -272,16 +290,22 @@ export default function Acervo() {
     try {
       await TitulosService.delete(bookToDelete.id_titulo)
       toast({
-        title: 'Livro excluído',
-        description: `O título ${bookToDelete.id_titulo} foi removido com sucesso.`,
+        title: 'Livro excluído com sucesso',
+        description: `O título "${bookToDelete.title}" (${bookToDelete.id_titulo}) e seus exemplares foram removidos do acervo.`,
       })
       setDeleteConfirmOpen(false)
       setBookToDelete(null)
-      loadBooks()
+      await loadBooks()
     } catch (err: any) {
+      let friendlyMessage =
+        err?.message || 'Verifique se não há empréstimos ou reservas ativas vinculadas.'
+      if (friendlyMessage.includes('violates foreign key constraint "exemplar_id_titulo_fkey"')) {
+        friendlyMessage =
+          'Não foi possível excluir os exemplares vinculados a este livro. Verifique dependências.'
+      }
       toast({
         title: 'Não foi possível excluir',
-        description: err.message || 'Verifique se não há empréstimos vinculados.',
+        description: friendlyMessage,
         variant: 'destructive',
       })
     } finally {
@@ -631,12 +655,7 @@ export default function Acervo() {
                                     }
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      if (
-                                        book.total_exemplares === 0 ||
-                                        book.exemplares_disponiveis === book.total_exemplares
-                                      ) {
-                                        handleDeleteBook(book.id_titulo, book.titulo_de_livro)
-                                      }
+                                      handleDeleteBook(book)
                                     }}
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -856,11 +875,18 @@ export default function Acervo() {
         onOpenChange={setDeleteConfirmOpen}
         title="Remover Livro do Acervo"
         description={
-          <div className="space-y-1.5">
+          <div className="space-y-2 text-xs sm:text-sm">
             <p>Deseja realmente remover a obra:</p>
             <p className="text-rose-600 font-semibold break-words">
               "{bookToDelete?.title}" ({bookToDelete?.id_titulo})
             </p>
+            {bookToDelete?.total_exemplares !== undefined && bookToDelete.total_exemplares > 0 && (
+              <p className="text-slate-600 bg-amber-50 p-2 rounded border border-amber-200">
+                Atenção: todos os{' '}
+                <span className="font-semibold">{bookToDelete.total_exemplares} exemplar(es)</span>{' '}
+                vinculados a esta obra também serão excluídos definitivamente do acervo.
+              </p>
+            )}
             <p className="text-slate-500">Esta ação não pode ser desfeita.</p>
           </div>
         }

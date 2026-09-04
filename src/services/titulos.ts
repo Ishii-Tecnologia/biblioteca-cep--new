@@ -343,28 +343,130 @@ export const TitulosService = {
   },
 
   async delete(id_titulo: string) {
-    const { data: exemplares } = await supabase
+    // 1. Buscar todos os exemplares vinculados ao título
+    const { data: exemplares, error: exemplaresErr } = await supabase
       .from('exemplar')
-      .select('id_exemplar')
+      .select('id_exemplar, seq, status')
       .eq('id_titulo', id_titulo)
 
-    if (exemplares && exemplares.length > 0) {
-      const exemplarIds = exemplares.map((e) => e.id_exemplar)
-      const { data: activeLoans } = await supabase
+    if (exemplaresErr) {
+      throw new Error(`Erro ao verificar exemplares do título: ${exemplaresErr.message}`)
+    }
+
+    const copyList = exemplares || []
+    const exemplarIds = copyList.map((e) => e.id_exemplar)
+
+    // 2. Regra de negócio: só permitir excluir quando todos os exemplares do livro estiverem disponíveis
+    // Bloquear com mensagem clara se houver exemplar emprestado, em manutenção ou reservado
+    const nonAvailableCopies = copyList.filter(
+      (c) => (c.status || '').toLowerCase() !== 'disponivel',
+    )
+    if (nonAvailableCopies.length > 0) {
+      const summary = nonAvailableCopies
+        .map((c) => `${c.id_exemplar} (${c.status})`)
+        .slice(0, 3)
+        .join(', ')
+      const extra =
+        nonAvailableCopies.length > 3 ? ` e mais ${nonAvailableCopies.length - 3}...` : ''
+      throw new Error(
+        `Não é possível excluir este livro porque há ${nonAvailableCopies.length} exemplar(es) não disponível(is) [${summary}${extra}]. Todos os exemplares devem estar com status "Disponível".`,
+      )
+    }
+
+    // 3. Verificar se há empréstimos ativos em andamento em qualquer um dos exemplares
+    if (exemplarIds.length > 0) {
+      const { data: activeLoans, error: activeLoansErr } = await supabase
         .from('emprestimo')
-        .select('id_emprestimo')
+        .select('id_emprestimo, id_exemplar')
         .in('id_exemplar', exemplarIds)
         .is('data_devolucao_real', null)
 
-      if (activeLoans && activeLoans.length > 0) {
-        throw new Error('Não é possível excluir título com empréstimos em andamento.')
+      if (activeLoansErr) {
+        throw new Error(`Erro ao checar empréstimos: ${activeLoansErr.message}`)
       }
 
-      await supabase.from('exemplar').delete().eq('id_titulo', id_titulo)
+      if (activeLoans && activeLoans.length > 0) {
+        throw new Error(
+          `Não é possível excluir a obra pois há ${activeLoans.length} empréstimo(s) em andamento nos exemplares vinculados.`,
+        )
+      }
     }
 
-    const { error } = await supabase.from('titulo').delete().eq('id_titulo', id_titulo)
-    if (error) throw error
+    // 4. Verificar se há reservas ativas vinculadas ao título
+    const { data: activeReservas, error: resErr } = await supabase
+      .from('reserva')
+      .select('id_reserva, status_reserva')
+      .eq('id_titulo', id_titulo)
+      .in('status_reserva', ['Ativa', 'Aguardando Retirada', 'Pendente'])
+
+    if (resErr) {
+      throw new Error(`Erro ao checar reservas: ${resErr.message}`)
+    }
+
+    if (activeReservas && activeReservas.length > 0) {
+      throw new Error(
+        `Não é possível excluir a obra pois há ${activeReservas.length} reserva(s) ativa(s) ou aguardando retirada para este título. Cancele as reservas antes de excluir.`,
+      )
+    }
+
+    // 5. Tratar referências que impedem a deleção dos exemplares e do título por FK:
+    // a) Desvincular reservas antigas/finalizadas que apontam para exemplar_reservado_id
+    if (exemplarIds.length > 0) {
+      const { error: clearResExemplarErr } = await supabase
+        .from('reserva')
+        .update({ exemplar_reservado_id: null })
+        .in('exemplar_reservado_id', exemplarIds)
+
+      if (clearResExemplarErr) {
+        throw new Error(
+          `Erro ao desvincular exemplares de reservas: ${clearResExemplarErr.message}`,
+        )
+      }
+
+      // b) Excluir empréstimos já finalizados (devolvidos) vinculados a esses exemplares para permitir a exclusão do exemplar (FK emprestimo_id_exemplar_fkey)
+      const { error: delLoansErr } = await supabase
+        .from('emprestimo')
+        .delete()
+        .in('id_exemplar', exemplarIds)
+
+      if (delLoansErr) {
+        throw new Error(
+          `Erro ao remover registros de empréstimos finalizados: ${delLoansErr.message}`,
+        )
+      }
+
+      // c) Excluir PRIMEIRO todos os exemplares vinculados ao título
+      const { error: delExemplarErr } = await supabase
+        .from('exemplar')
+        .delete()
+        .eq('id_titulo', id_titulo)
+
+      if (delExemplarErr) {
+        throw new Error(`Erro ao excluir exemplares vinculados: ${delExemplarErr.message}`)
+      }
+    }
+
+    // d) Remover reservas finalizadas/canceladas restantes do título (FK reserva_id_titulo_fkey)
+    const { error: delReservasErr } = await supabase
+      .from('reserva')
+      .delete()
+      .eq('id_titulo', id_titulo)
+
+    if (delReservasErr) {
+      throw new Error(
+        `Erro ao remover registros de reservas deste título: ${delReservasErr.message}`,
+      )
+    }
+
+    // 6. Excluir DEPOIS o título da tabela "titulo"
+    const { error: delTituloErr } = await supabase
+      .from('titulo')
+      .delete()
+      .eq('id_titulo', id_titulo)
+
+    if (delTituloErr) {
+      throw new Error(`Erro ao excluir título do acervo: ${delTituloErr.message}`)
+    }
   },
 
   /**
