@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client'
 import type { Tables, TablesInsert, TablesUpdate } from '@/lib/supabase/types'
+import { HistoricoService } from './historico'
 import { normalizeAndValidateIsbn, formatAuthorDisplay } from './isbn'
 
 export type Titulo = Tables<'titulo'> & {
@@ -225,7 +226,12 @@ export const TitulosService = {
     return data
   },
 
-  async create(titulo: TituloInsert, numExemplares = 1, localizacaoPadrao = 'Estante Geral') {
+  async create(
+    titulo: TituloInsert,
+    numExemplares = 1,
+    localizacaoPadrao = 'Estante Geral',
+    operador?: { nome?: string; id?: string },
+  ) {
     // F-09: ISBN obrigatório para novos cadastros com validação de formato e unicidade
     if (!titulo.isbn || !titulo.isbn.trim()) {
       throw new Error('O código ISBN é obrigatório para novos cadastros no acervo.')
@@ -295,10 +301,62 @@ export const TitulosService = {
       await supabase.from('exemplar').insert(exemplaresToInsert)
     }
 
+    // Auditoria: registro de inclusão do título no acervo
+    try {
+      const nomeOp = operador?.nome || 'Operador'
+      const idOp = operador?.id || null
+      const descTitulo = `Inclusão do título "${data.titulo_de_livro}" (${data.id_titulo}) no acervo com ${numExemplares} exemplar(es)`
+      await HistoricoService.log(
+        data.id_titulo,
+        'Inclusão de Livro',
+        null,
+        descTitulo,
+        nomeOp,
+        'titulo',
+        idOp,
+        `ISBN: ${data.isbn || '-'}; Categoria: ${data.categoria || 'Geral'}; Localização: ${localizacaoPadrao}`,
+      )
+
+      // Registrar também a criação dos exemplares iniciais
+      if (numExemplares > 0) {
+        for (let seq = 1; seq <= numExemplares; seq++) {
+          const exemplarCode = `${data.id_titulo}-${seq}`
+          await HistoricoService.log(
+            exemplarCode,
+            'Inclusão de Exemplar',
+            null,
+            `Inclusão do exemplar ${exemplarCode} do livro "${data.titulo_de_livro}" (${data.id_titulo})`,
+            nomeOp,
+            'exemplar',
+            idOp,
+            `Localização inicial: ${localizacaoPadrao}`,
+          )
+        }
+      }
+    } catch (auditErr) {
+      console.error('Erro ao registrar auditoria na inclusão de título:', auditErr)
+    }
+
     return data
   },
 
-  async update(id_titulo: string, updates: TituloUpdate) {
+  async update(
+    id_titulo: string,
+    updates: TituloUpdate,
+    operador?: { nome?: string; id?: string },
+  ) {
+    // Buscar estado anterior para auditoria descritiva de alterações
+    let oldTitulo: any = null
+    try {
+      const { data: current } = await supabase
+        .from('titulo')
+        .select('*')
+        .eq('id_titulo', id_titulo)
+        .maybeSingle()
+      oldTitulo = current
+    } catch {
+      // continua mesmo se não carregar
+    }
     let normalizedIsbn = updates.isbn
     if (updates.isbn && updates.isbn.trim()) {
       const isbnValidation = normalizeAndValidateIsbn(updates.isbn)
@@ -339,14 +397,73 @@ export const TitulosService = {
       .single()
 
     if (error) throw error
+
+    // Auditoria: registrar alteração do título
+    try {
+      const nomeOp = operador?.nome || 'Operador'
+      const idOp = operador?.id || null
+      const alterations: string[] = []
+
+      if (oldTitulo) {
+        if (updates.titulo_de_livro && updates.titulo_de_livro !== oldTitulo.titulo_de_livro) {
+          alterations.push(`Título: "${oldTitulo.titulo_de_livro}" ➔ "${updates.titulo_de_livro}"`)
+        }
+        if (updates.autor && updates.autor !== oldTitulo.autor) {
+          alterations.push(`Autor: "${oldTitulo.autor || '-'}" ➔ "${updates.autor}"`)
+        }
+        if (updates.categoria && updates.categoria !== oldTitulo.categoria) {
+          alterations.push(`Categoria: "${oldTitulo.categoria || '-'}" ➔ "${updates.categoria}"`)
+        }
+        if (updates.editora && updates.editora !== oldTitulo.editora) {
+          alterations.push(`Editora: "${oldTitulo.editora || '-'}" ➔ "${updates.editora}"`)
+        }
+        if (updates.isbn && updates.isbn !== oldTitulo.isbn) {
+          alterations.push(`ISBN: "${oldTitulo.isbn || '-'}" ➔ "${updates.isbn}"`)
+        }
+        if (updates.ano_publicacao && updates.ano_publicacao !== oldTitulo.ano_publicacao) {
+          alterations.push(`Ano: ${oldTitulo.ano_publicacao || '-'} ➔ ${updates.ano_publicacao}`)
+        }
+        if (updates.ativo !== undefined && updates.ativo !== oldTitulo.ativo) {
+          alterations.push(
+            `Status: ${oldTitulo.ativo ? 'Ativo' : 'Inativo'} ➔ ${updates.ativo ? 'Ativo' : 'Inativo'}`,
+          )
+        }
+      }
+
+      const descAlt =
+        alterations.length > 0
+          ? `Alteração do título "${data.titulo_de_livro}" (${data.id_titulo}): ${alterations.join('; ')}`
+          : `Alteração no cadastro do título "${data.titulo_de_livro}" (${data.id_titulo})`
+
+      await HistoricoService.log(
+        data.id_titulo,
+        'Alteração de Livro',
+        null,
+        descAlt,
+        nomeOp,
+        'titulo',
+        idOp,
+        alterations.length > 0 ? alterations.join(' | ') : null,
+      )
+    } catch (auditErr) {
+      console.error('Erro ao registrar auditoria na alteração de título:', auditErr)
+    }
+
     return data
   },
 
-  async delete(id_titulo: string) {
+  async delete(id_titulo: string, operador?: { nome?: string; id?: string }) {
+    // 0. Buscar dados completos do título antes de excluir para o log descritivo
+    const { data: tituloData } = await supabase
+      .from('titulo')
+      .select('*')
+      .eq('id_titulo', id_titulo)
+      .maybeSingle()
+
     // 1. Buscar todos os exemplares vinculados ao título
     const { data: exemplares, error: exemplaresErr } = await supabase
       .from('exemplar')
-      .select('id_exemplar, seq, status')
+      .select('id_exemplar, seq, status, localizacao')
       .eq('id_titulo', id_titulo)
 
     if (exemplaresErr) {
@@ -466,6 +583,47 @@ export const TitulosService = {
 
     if (delTituloErr) {
       throw new Error(`Erro ao excluir título do acervo: ${delTituloErr.message}`)
+    }
+
+    // 7. Auditoria: registrar exclusão do título e seus exemplares
+    try {
+      const nomeOp = operador?.nome || 'Operador'
+      const idOp = operador?.id || null
+      const tituloNome = tituloData?.titulo_de_livro || id_titulo
+      const totalExemplaresRemovidos = copyList.length
+      const descExclusao =
+        totalExemplaresRemovidos > 0
+          ? `Exclusão do título "${tituloNome}" (${id_titulo}) e ${totalExemplaresRemovidos} exemplar(es) vinculado(s)`
+          : `Exclusão do título "${tituloNome}" (${id_titulo})`
+
+      const listaCodigos = copyList.map((e) => e.id_exemplar).join(', ')
+
+      await HistoricoService.log(
+        id_titulo,
+        'Exclusão de Livro',
+        null,
+        descExclusao,
+        nomeOp,
+        'titulo',
+        idOp,
+        totalExemplaresRemovidos > 0 ? `Exemplares removidos: ${listaCodigos}` : null,
+      )
+
+      // Registrar também a exclusão individual de cada exemplar removido
+      for (const ex of copyList) {
+        await HistoricoService.log(
+          ex.id_exemplar,
+          'Exclusão de Exemplar',
+          null,
+          `Exclusão do exemplar ${ex.id_exemplar} devido à exclusão do livro "${tituloNome}" (${id_titulo})`,
+          nomeOp,
+          'exemplar',
+          idOp,
+          `Localização anterior: ${ex.localizacao || 'Estante Geral'}`,
+        )
+      }
+    } catch (auditErr) {
+      console.error('Erro ao registrar auditoria na exclusão de título:', auditErr)
     }
   },
 

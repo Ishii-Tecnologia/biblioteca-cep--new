@@ -40,6 +40,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/use-auth'
 import { uploadImageToStorage } from '@/lib/image-upload'
 import { BookMetadata } from '@/services/isbn'
 import { ParametrosService } from '@/services/parametros'
@@ -60,6 +61,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
   categories: initialCategories,
 }) => {
   const { toast } = useToast()
+  const { profile, user } = useAuth()
   const isEditing = !!bookToEdit
 
   const [idTitulo, setIdTitulo] = useState('')
@@ -737,21 +739,30 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
           ? bookToEdit?.isbn || null
           : null
 
+      const operadorInfo = {
+        nome: profile?.nome || profile?.full_name || profile?.email || user?.email || 'Operador',
+        id: user?.id || profile?.id,
+      }
+
       if (isEditing && bookToEdit) {
-        await TitulosService.update(bookToEdit.id_titulo, {
-          titulo_de_livro: tituloDeLivro.trim(),
-          autor: finalUnifiedAuthor,
-          autor_espiritual: finalAutorEspiritual,
-          autor_mediunico: finalAutorMediunico,
-          editora: editora.trim() || null,
-          ano_publicacao: anoPublicacao === '' ? null : Number(anoPublicacao),
-          categoria: categoria || 'Geral',
-          sinopse: sinopse.trim() || null,
-          capa_url: capaUrl.trim() || null,
-          vol: vol === '' ? 0 : Number(vol),
-          ativo: ativo,
-          isbn: normalizedIsbnValue,
-        })
+        await TitulosService.update(
+          bookToEdit.id_titulo,
+          {
+            titulo_de_livro: tituloDeLivro.trim(),
+            autor: finalUnifiedAuthor,
+            autor_espiritual: finalAutorEspiritual,
+            autor_mediunico: finalAutorMediunico,
+            editora: editora.trim() || null,
+            ano_publicacao: anoPublicacao === '' ? null : Number(anoPublicacao),
+            categoria: categoria || 'Geral',
+            sinopse: sinopse.trim() || null,
+            capa_url: capaUrl.trim() || null,
+            vol: vol === '' ? 0 : Number(vol),
+            ativo: ativo,
+            isbn: normalizedIsbnValue,
+          },
+          operadorInfo,
+        )
 
         toast({
           title: 'Obra atualizada',
@@ -774,7 +785,7 @@ export const BookFormModal: React.FC<BookFormModalProps> = ({
           isbn: normalizedIsbnValue,
         }
 
-        await TitulosService.create(payload, numExemplares, localizacao)
+        await TitulosService.create(payload, numExemplares, localizacao, operadorInfo)
 
         toast({
           title: 'Obra cadastrada',

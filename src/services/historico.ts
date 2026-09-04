@@ -50,6 +50,8 @@ export const HistoricoService = {
     if (operationFilter && operationFilter !== 'all' && operationFilter !== 'todos') {
       if (operationFilter === 'manutencao_todas' || operationFilter === 'Manutenção') {
         query = query.or('tipo.ilike.%manuten%,tipo.ilike.%manutencao%')
+      } else if (operationFilter === 'acervo_geral') {
+        query = query.or('tipo.ilike.%livro%,tipo.ilike.%exemplar%,tipo.ilike.%acervo%')
       } else {
         query = query.ilike('tipo', operationFilter)
       }
@@ -125,9 +127,25 @@ export const HistoricoService = {
 
       if (!profilesErr && profilesData) {
         for (const p of profilesData) {
-          const displayName = p.nome || p.full_name || p.email || 'Operador'
+          const displayName = (p.nome || p.full_name || p.email || 'Operador').trim()
           usersMap.set(p.id, displayName)
         }
+      }
+
+      // Fallback para usuário autenticado atual se coincidir com usuario_id
+      try {
+        const { data: currentAuth } = await supabase.auth.getUser()
+        if (currentAuth?.user?.id && !usersMap.has(currentAuth.user.id)) {
+          const metaName =
+            currentAuth.user.user_metadata?.full_name ||
+            currentAuth.user.user_metadata?.nome ||
+            currentAuth.user.email?.split('@')[0]
+          if (metaName) {
+            usersMap.set(currentAuth.user.id, metaName.trim())
+          }
+        }
+      } catch {
+        // silencioso
       }
     }
 
@@ -172,6 +190,8 @@ export const HistoricoService = {
       let operadorName = 'Sistema'
       if (item.usuario_id && usersMap.has(item.usuario_id)) {
         operadorName = usersMap.get(item.usuario_id)!
+      } else if (item.usuario_id) {
+        operadorName = 'Operador'
       }
 
       return {
@@ -198,9 +218,11 @@ export const HistoricoService = {
   ): Promise<number> {
     let query = supabase.from('historico').select('id', { count: 'exact', head: true })
 
-    if (operationFilter && operationFilter !== 'all') {
+    if (operationFilter && operationFilter !== 'all' && operationFilter !== 'todos') {
       if (operationFilter === 'manutencao_todas' || operationFilter === 'Manutenção') {
         query = query.or('tipo.ilike.%manuten%,tipo.ilike.%manutencao%')
+      } else if (operationFilter === 'acervo_geral') {
+        query = query.or('tipo.ilike.%livro%,tipo.ilike.%exemplar%,tipo.ilike.%acervo%')
       } else {
         query = query.ilike('tipo', operationFilter)
       }
@@ -251,6 +273,8 @@ export const HistoricoService = {
     if (opFilter && opFilter !== 'todos') {
       if (opFilter === 'manutencao_todas' || opFilter === 'Manutenção') {
         query = query.or('tipo.ilike.%manuten%,tipo.ilike.%manutencao%')
+      } else if (opFilter === 'acervo_geral') {
+        query = query.or('tipo.ilike.%livro%,tipo.ilike.%exemplar%,tipo.ilike.%acervo%')
       } else {
         query = query.eq('tipo', opFilter)
       }
@@ -300,6 +324,27 @@ export const HistoricoService = {
         }
       } catch {
         // Fallback se não autenticado
+      }
+    }
+
+    // Se temos usuario_sistema explícito e usuário logado, garantir que o profile tenha nome coerente se ainda não tiver
+    if (
+      resolvedUserId &&
+      usuario_sistema &&
+      usuario_sistema !== 'Sistema' &&
+      usuario_sistema !== 'Operador'
+    ) {
+      try {
+        // Atualização não-bloqueante de fallback para garantir nome no profile
+        void Promise.resolve(
+          supabase
+            .from('profiles')
+            .update({ nome: usuario_sistema, full_name: usuario_sistema })
+            .eq('id', resolvedUserId)
+            .is('nome', null),
+        ).catch(() => {})
+      } catch {
+        // ignora
       }
     }
 

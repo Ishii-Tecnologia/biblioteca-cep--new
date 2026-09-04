@@ -91,7 +91,11 @@ export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book,
 
     setAdding(true)
     try {
-      await ExemplaresService.create(book.id_titulo, newCopiesLocation, newCopiesQty)
+      const operadorInfo = {
+        nome: profile?.nome || profile?.full_name || profile?.email || user?.email || 'Operador',
+        id: user?.id || profile?.id,
+      }
+      await ExemplaresService.create(book.id_titulo, newCopiesLocation, newCopiesQty, operadorInfo)
       toast({
         title: 'Exemplares adicionados',
         description: `${newCopiesQty} novo(s) exemplar(es) criado(s).`,
@@ -128,13 +132,16 @@ export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book,
   const handleSaveEdit = async (copyId: string) => {
     setSavingEdit(true)
     try {
-      const operatorName = profile?.full_name || user?.email || 'Operador'
+      const operatorName =
+        profile?.nome || profile?.full_name || profile?.email || user?.email || 'Operador'
+      const operatorId = user?.id || profile?.id || null
       await ExemplaresService.updateStatus(
         copyId,
         editStatus,
         editLocation,
         editObservacao,
         operatorName,
+        operatorId,
       )
       toast({
         title: 'Exemplar atualizado',
@@ -164,7 +171,11 @@ export const CopiesModal: React.FC<CopiesModalProps> = ({ isOpen, onClose, book,
     if (!copyToDelete) return
     setDeleteLoading(true)
     try {
-      await ExemplaresService.delete(copyToDelete.id_exemplar)
+      const operadorInfo = {
+        nome: profile?.nome || profile?.full_name || profile?.email || user?.email || 'Operador',
+        id: user?.id || profile?.id,
+      }
+      await ExemplaresService.delete(copyToDelete.id_exemplar, operadorInfo)
       toast({
         title: 'Exemplar removido',
         description: `O exemplar ${copyToDelete.id_exemplar} foi excluído com sucesso.`,

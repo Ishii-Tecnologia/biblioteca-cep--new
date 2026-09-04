@@ -8,6 +8,7 @@ export interface UserProfile {
   id: string
   email: string
   full_name: string
+  nome?: string
   role: UserRole
   avatar_url?: string
   id_leitor?: number
@@ -92,6 +93,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         id: currentUser.id,
         email: currentUser.email || '',
         full_name: fullName,
+        nome: profileRow?.nome || fullName,
         role: (profileRow?.papel || profileRow?.role || role) as UserRole,
         avatar_url: avatarUrl,
         id_leitor: leitorData?.id_leitor,
@@ -102,6 +104,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         id: currentUser.id,
         email: currentUser.email || '',
         full_name: currentUser.email?.split('@')[0] || 'Usuário',
+        nome: currentUser.email?.split('@')[0] || 'Usuário',
         role: currentUser.email?.includes('admin') ? 'admin' : 'leitor',
       })
     }

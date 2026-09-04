@@ -115,7 +115,7 @@ export default function Acervo() {
   const initialQuery = searchParams.get('q') || ''
   const initialStatus = searchParams.get('status') || 'all'
 
-  const { isOperadorOrAdmin, isAdmin, user } = useAuth()
+  const { isOperadorOrAdmin, isAdmin, user, profile } = useAuth()
   const { toast } = useToast()
   const { refreshCounters } = useHeaderCounters()
 
@@ -288,7 +288,11 @@ export default function Acervo() {
     if (!bookToDelete) return
     setDeleteLoading(true)
     try {
-      await TitulosService.delete(bookToDelete.id_titulo)
+      const operadorInfo = {
+        nome: profile?.nome || profile?.full_name || profile?.email || user?.email || 'Operador',
+        id: user?.id || profile?.id,
+      }
+      await TitulosService.delete(bookToDelete.id_titulo, operadorInfo)
       toast({
         title: 'Livro excluído com sucesso',
         description: `O título "${bookToDelete.title}" (${bookToDelete.id_titulo}) e seus exemplares foram removidos do acervo.`,

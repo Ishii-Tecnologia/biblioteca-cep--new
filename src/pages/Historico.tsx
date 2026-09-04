@@ -1379,6 +1379,48 @@ export default function Historico() {
 
   const getTipoBadge = (tipo: string) => {
     const t = tipo.toLowerCase()
+    if (t.includes('inclusão de livro') || t.includes('inclusao de livro')) {
+      return (
+        <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-semibold">
+          Inclusão de Livro
+        </Badge>
+      )
+    }
+    if (t.includes('alteração de livro') || t.includes('alteracao de livro')) {
+      return (
+        <Badge className="bg-sky-100 text-sky-800 border-sky-200 font-semibold">
+          Alteração de Livro
+        </Badge>
+      )
+    }
+    if (t.includes('exclusão de livro') || t.includes('exclusao de livro')) {
+      return (
+        <Badge className="bg-rose-100 text-rose-900 border-rose-300 font-bold">
+          Exclusão de Livro
+        </Badge>
+      )
+    }
+    if (t.includes('inclusão de exemplar') || t.includes('inclusao de exemplar')) {
+      return (
+        <Badge className="bg-teal-100 text-teal-800 border-teal-200 font-semibold">
+          Inclusão de Exemplar
+        </Badge>
+      )
+    }
+    if (t.includes('alteração de exemplar') || t.includes('alteracao de exemplar')) {
+      return (
+        <Badge className="bg-cyan-100 text-cyan-800 border-cyan-200 font-semibold">
+          Alteração de Exemplar
+        </Badge>
+      )
+    }
+    if (t.includes('exclusão de exemplar') || t.includes('exclusao de exemplar')) {
+      return (
+        <Badge className="bg-red-100 text-red-800 border-red-200 font-semibold">
+          Exclusão de Exemplar
+        </Badge>
+      )
+    }
     if (t.includes('empréstimo') || t.includes('emprestimo')) {
       return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Empréstimo</Badge>
     }
@@ -1883,6 +1925,16 @@ export default function Historico() {
                     Devoluções
                   </Button>
 
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={tipoFiltroLogs === 'acervo_geral' ? 'default' : 'outline'}
+                    onClick={() => handleTipoLogsChange('acervo_geral')}
+                    className="h-7 text-xs px-2.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 font-medium"
+                  >
+                    📖 Ações no Acervo
+                  </Button>
+
                   {(tipoFiltroLogs !== 'todos' || searchLogs || dataInicioLogs || dataFimLogs) && (
                     <Button
                       type="button"
@@ -1914,6 +1966,23 @@ export default function Historico() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="todos">Todos os tipos de operações</SelectItem>
+                      <SelectItem value="acervo_geral" className="font-semibold text-emerald-700">
+                        📚 Todas as Ações de Acervo (Títulos e Exemplares)
+                      </SelectItem>
+                      <SelectItem value="Inclusão de Livro">
+                        📖 Inclusão de Livro (Título)
+                      </SelectItem>
+                      <SelectItem value="Alteração de Livro">
+                        ✏️ Alteração de Livro (Título)
+                      </SelectItem>
+                      <SelectItem value="Exclusão de Livro">
+                        🗑️ Exclusão de Livro (Título)
+                      </SelectItem>
+                      <SelectItem value="Inclusão de Exemplar">➕ Inclusão de Exemplar</SelectItem>
+                      <SelectItem value="Alteração de Exemplar">
+                        🔄 Alteração de Exemplar
+                      </SelectItem>
+                      <SelectItem value="Exclusão de Exemplar">❌ Exclusão de Exemplar</SelectItem>
                       <SelectItem value="manutencao_todas" className="font-semibold text-rose-700">
                         🔧 Todas as Manutenções (Entradas e Saídas)
                       </SelectItem>
