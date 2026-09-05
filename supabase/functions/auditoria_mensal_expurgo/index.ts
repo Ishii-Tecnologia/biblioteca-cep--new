@@ -130,14 +130,15 @@ Deno.serve(async (req: Request) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-    const supabaseServiceKey =
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    // Usar estritamente a chave SUPABASE_SERVICE_ROLE_KEY para contornar RLS e executar tarefas administrativas
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
     if (!supabaseUrl || !supabaseServiceKey) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Configuração do servidor ausente (SUPABASE_URL / SERVICE_ROLE_KEY).',
+          error:
+            'Configuração do servidor ausente (SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY não definidos).',
           message: 'Configuração de backend incompleta no ambiente.',
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },

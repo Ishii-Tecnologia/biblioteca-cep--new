@@ -179,7 +179,12 @@ export const AuditoriaJobService = {
       }
 
       if (data && typeof data === 'object') {
-        return data as JobRunResponse
+        const res = data as JobRunResponse
+        // Garantir que se a resposta vier com success: false, a UI capture a mensagem correta
+        if (res.success === false && !res.error && res.message) {
+          res.error = res.message
+        }
+        return res
       }
 
       return {
@@ -222,7 +227,11 @@ export const AuditoriaJobService = {
       }
 
       if (data && typeof data === 'object') {
-        return data as JobRunResponse
+        const res = data as JobRunResponse
+        if (res.success === false && !res.error && res.message) {
+          res.error = res.message
+        }
+        return res
       }
 
       return {
