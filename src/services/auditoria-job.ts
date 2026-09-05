@@ -32,11 +32,12 @@ export interface JobRunResponse {
   message: string
   skipped?: boolean
   error?: string
+  provider?: 'resend' | 'smtp' | 'simulado'
   ano_mes?: string
   total_registros_relatorio?: number
   registros_expurgados?: number
   duracao_ms?: number
-  provedor_email?: 'resend' | 'simulado'
+  provedor_email?: 'resend' | 'smtp' | 'simulado'
   destinatarios_enviados?: string[]
   destinatarios_invalidos?: string[]
 }

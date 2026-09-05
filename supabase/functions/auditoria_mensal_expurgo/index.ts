@@ -421,12 +421,19 @@ Deno.serve(async (req: Request) => {
       attachmentName: `relatorio_auditoria_${anoMes}.pdf`,
     })
 
+    const providerLabel =
+      emailResult.provider === 'resend'
+        ? '(Envio real efetuado via Resend)'
+        : emailResult.provider === 'smtp'
+          ? '(Envio real efetuado via SMTP / Gmail)'
+          : '(Envio simulado — nenhum provedor configurado)'
+
     // Registrar no log da auditoria a tentativa de envio (auditoria da auditoria)
     await supabaseAdmin.from('historico').insert({
       tipo: emailResult.success ? 'Envio de Auditoria Concluído' : 'Falha no Envio de Auditoria',
       descricao: emailResult.success
-        ? `Relatório de auditoria mensal enviado com sucesso para ${validEmails.length} destinatário(s). ${emailResult.provider === 'simulado' ? '(Envio simulado/provedor aguardando chave RESEND_API_KEY)' : '(Envio real efetuado via Resend)'}.`
-        : `Tentativa de envio de e-mail falhou: ${emailResult.message}`,
+        ? `Relatório de auditoria mensal enviado com sucesso para ${validEmails.length} destinatário(s). ${providerLabel}.`
+        : `Tentativa de envio de e-mail falhou (${emailResult.provider}): ${emailResult.message}`,
       entidade_tipo: 'sistema',
       entidade_id: 'job_auditoria',
       observacao: `Período: ${dataInicioBR} a ${dataFimBR}. Total de registros no relatório: ${totalRegistros}.`,
@@ -626,7 +633,11 @@ async function handleSendTest({
   )
 }
 
-// Disparo real (via Resend se RESEND_API_KEY existir) ou simulado com log transparente
+// Disparo real (via Resend, SMTP ou simulado com log transparente)
+// Ordem de prioridade dos provedores:
+// 1. Se RESEND_API_KEY existir -> usar Resend
+// 2. Senão, se SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS existirem -> usar SMTP (Gmail ou similar)
+// 3. Senão -> modo simulado (sucesso: true, resposta explicativa)
 async function sendEmailOrSimulate({
   to,
   from,
@@ -641,11 +652,11 @@ async function sendEmailOrSimulate({
   body: string
   attachmentBase64: string
   attachmentName: string
-}): Promise<{ success: boolean; message: string; provider: 'resend' | 'simulado' }> {
-  const resendApiKey = Deno.env.get('RESEND_API_KEY')
+}): Promise<{ success: boolean; message: string; provider: 'resend' | 'smtp' | 'simulado' }> {
+  const resendApiKey = Deno.env.get('RESEND_API_KEY')?.trim()
 
-  // Se houver chave do provedor Resend configurada
-  if (resendApiKey && resendApiKey.trim().length > 5) {
+  // 1. Provedor Resend
+  if (resendApiKey && resendApiKey.length > 5) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
@@ -685,16 +696,334 @@ async function sendEmailOrSimulate({
     } catch (e: any) {
       return {
         success: false,
-        message: `Falha de rede ao conectar com provedor de e-mail: ${e.message}`,
+        message: `Falha de rede ao conectar com provedor Resend: ${e.message}`,
         provider: 'resend',
       }
     }
   }
 
-  // Sem provedor configurado no momento: simulação fiel e transparente
+  // 2. Provedor SMTP (Gmail ou compatível)
+  const smtpHost = Deno.env.get('SMTP_HOST')?.trim()
+  const smtpPortStr = Deno.env.get('SMTP_PORT')?.trim()
+  const smtpUser = Deno.env.get('SMTP_USER')?.trim()
+  const smtpPass = Deno.env.get('SMTP_PASS')?.trim()
+
+  const hasAllSmtpSecrets =
+    Boolean(smtpHost) && Boolean(smtpPortStr) && Boolean(smtpUser) && Boolean(smtpPass)
+
+  if (hasAllSmtpSecrets) {
+    const smtpPort = parseInt(smtpPortStr || '465', 10) || 465
+    return await sendViaSmtp({
+      host: smtpHost!,
+      port: smtpPort,
+      user: smtpUser!,
+      pass: smtpPass!,
+      from,
+      to,
+      subject,
+      body,
+      attachmentBase64,
+      attachmentName,
+    })
+  }
+
+  // 3. Sem provedor configurado no momento: simulação fiel e transparente
   return {
     success: true,
-    message: `Envio simulado com sucesso para ${to.join(', ')} com anexo ${attachmentName} (${Math.round((attachmentBase64.length * 3) / 4 / 1024)} KB). Ponto de integração 100% pronto: basta cadastrar a chave RESEND_API_KEY no backend para transmissão externa real.`,
+    message: `Envio simulado com sucesso para ${to.join(', ')} com anexo ${attachmentName} (${Math.round((attachmentBase64.length * 3) / 4 / 1024)} KB). Nenhum provedor configurado (configure RESEND_API_KEY ou SMTP_HOST, SMTP_PORT, SMTP_USER e SMTP_PASS nos segredos do Supabase).`,
     provider: 'simulado',
+  }
+}
+
+// Envio direto via SMTP com suporte a TLS direto (porta 465) e STARTTLS (porta 587)
+async function sendViaSmtp({
+  host,
+  port,
+  user,
+  pass,
+  from,
+  to,
+  subject,
+  body,
+  attachmentBase64,
+  attachmentName,
+}: {
+  host: string
+  port: number
+  user: string
+  pass: string
+  from: string
+  to: string[]
+  subject: string
+  body: string
+  attachmentBase64: string
+  attachmentName: string
+}): Promise<{ success: boolean; message: string; provider: 'smtp' }> {
+  let conn: Deno.Conn | null = null
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+  let writer: WritableStreamDefaultWriter<Uint8Array> | null = null
+  let readBuffer = ''
+
+  const textDecoder = new TextDecoder()
+  const textEncoder = new TextEncoder()
+
+  // Conectar com timeout
+  const connectPromise = async (): Promise<Deno.Conn> => {
+    // Port 465 conecta direto com TLS; portas 587 ou 25 conectam em TCP puro e usam STARTTLS
+    if (port === 465) {
+      return await Deno.connectTls({ hostname: host, port })
+    }
+    return await Deno.connect({ hostname: host, port })
+  }
+
+  try {
+    // Timeout global de 25s para toda a operação SMTP
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () =>
+          reject(
+            new Error(`Tempo limite (25s) esgotado ao conectar no servidor SMTP ${host}:${port}.`),
+          ),
+        25000,
+      ),
+    )
+
+    const runSmtpSession = async (): Promise<string> => {
+      conn = await connectPromise()
+      reader = conn.readable.getReader()
+      writer = conn.writable.getWriter()
+
+      const readLine = async (): Promise<string> => {
+        while (true) {
+          const newlineIdx = readBuffer.indexOf('\n')
+          if (newlineIdx !== -1) {
+            const line = readBuffer.slice(0, newlineIdx).replace(/\r$/, '')
+            readBuffer = readBuffer.slice(newlineIdx + 1)
+            return line
+          }
+          const { value, done } = await reader!.read()
+          if (done) {
+            if (readBuffer.length > 0) {
+              const line = readBuffer.replace(/\r$/, '')
+              readBuffer = ''
+              return line
+            }
+            throw new Error('Conexão SMTP encerrada inesperadamente pelo servidor.')
+          }
+          readBuffer += textDecoder.decode(value, { stream: true })
+        }
+      }
+
+      const readResponse = async (): Promise<{
+        code: number
+        lines: string[]
+        fullText: string
+      }> => {
+        const lines: string[] = []
+        let lastCode = 0
+        while (true) {
+          const line = await readLine()
+          lines.push(line)
+          const match = line.match(/^(\d{3})([ -])(.*)$/)
+          if (match) {
+            lastCode = parseInt(match[1], 10)
+            const isContinuation = match[2] === '-'
+            if (!isContinuation) break
+          } else {
+            break
+          }
+        }
+        return { code: lastCode, lines, fullText: lines.join(' | ') }
+      }
+
+      const writeCommand = async (cmd: string): Promise<void> => {
+        await writer!.write(textEncoder.encode(cmd + '\r\n'))
+      }
+
+      // 1. Ler saudação inicial do servidor (código 220)
+      const greeting = await readResponse()
+      if (greeting.code !== 220) {
+        throw new Error(`Saudação inicial SMTP rejeitada (${greeting.code}): ${greeting.fullText}`)
+      }
+
+      // 2. EHLO inicial
+      await writeCommand(`EHLO localhost`)
+      let ehloResp = await readResponse()
+      if (ehloResp.code !== 250) {
+        // Tentar HELO se EHLO não for suportado
+        await writeCommand(`HELO localhost`)
+        ehloResp = await readResponse()
+        if (ehloResp.code !== 250) {
+          throw new Error(
+            `Handshake SMTP (EHLO/HELO) falhou (${ehloResp.code}): ${ehloResp.fullText}`,
+          )
+        }
+      }
+
+      // 3. Se não estiver em TLS (porta diferente de 465), negociar STARTTLS
+      if (port !== 465) {
+        await writeCommand('STARTTLS')
+        const starttlsResp = await readResponse()
+        if (starttlsResp.code !== 220) {
+          throw new Error(
+            `Servidor SMTP não aceitou STARTTLS na porta ${port} (${starttlsResp.code}): ${starttlsResp.fullText}`,
+          )
+        }
+
+        // Liberar reader/writer antigos e atualizar conexão para TLS
+        reader.releaseLock()
+        writer.releaseLock()
+        conn = await Deno.startTls(conn, { hostname: host })
+        reader = conn.readable.getReader()
+        writer = conn.writable.getWriter()
+        readBuffer = ''
+
+        // Re-enviar EHLO após estabelecer conexão segura TLS
+        await writeCommand(`EHLO localhost`)
+        const postTlsEhlo = await readResponse()
+        if (postTlsEhlo.code !== 250) {
+          throw new Error(
+            `Handshake SMTP pós-STARTTLS falhou (${postTlsEhlo.code}): ${postTlsEhlo.fullText}`,
+          )
+        }
+      }
+
+      // 4. Autenticação AUTH LOGIN (padrão aceito por Gmail e SMTPs seguros)
+      await writeCommand('AUTH LOGIN')
+      const authResp = await readResponse()
+      if (authResp.code !== 334) {
+        throw new Error(
+          `Servidor SMTP recusou início de autenticação (${authResp.code}): ${authResp.fullText}`,
+        )
+      }
+
+      // Enviar usuário em Base64
+      await writeCommand(btoa(user))
+      const userResp = await readResponse()
+      if (userResp.code !== 334) {
+        throw new Error(
+          `Usuário SMTP recusado pelo servidor (${userResp.code}): ${userResp.fullText}`,
+        )
+      }
+
+      // Limpar espaços da senha de app (Gmail gera agrupada em 4 blocos de 4 chars com espaços)
+      const sanitizedPass = pass.replace(/\s+/g, '')
+      await writeCommand(btoa(sanitizedPass))
+      const passResp = await readResponse()
+      if (passResp.code !== 235) {
+        throw new Error(
+          `Autenticação SMTP recusada (${passResp.code}): ${passResp.fullText}. Para Gmail, verifique se está usando uma 'Senha de App' de 16 letras gerada em myaccount.google.com/apppasswords.`,
+        )
+      }
+
+      // 5. MAIL FROM
+      // Se from contiver nome e e-mail no formato 'Nome <email>', extrair apenas o endereço para envelope MAIL FROM
+      const fromMatch = from.match(/<([^>]+)>/)
+      const envelopeFrom = fromMatch ? fromMatch[1].trim() : from.trim() || user
+      await writeCommand(`MAIL FROM:<${envelopeFrom}>`)
+      const mailFromResp = await readResponse()
+      if (mailFromResp.code !== 250) {
+        throw new Error(`Remetente SMTP recusado (${mailFromResp.code}): ${mailFromResp.fullText}`)
+      }
+
+      // 6. RCPT TO (para cada destinatário)
+      for (const recipient of to) {
+        const rcptMatch = recipient.match(/<([^>]+)>/)
+        const envelopeTo = rcptMatch ? rcptMatch[1].trim() : recipient.trim()
+        await writeCommand(`RCPT TO:<${envelopeTo}>`)
+        const rcptResp = await readResponse()
+        if (rcptResp.code !== 250 && rcptResp.code !== 251) {
+          throw new Error(
+            `Destinatário SMTP recusado: ${recipient} (${rcptResp.code}): ${rcptResp.fullText}`,
+          )
+        }
+      }
+
+      // 7. DATA
+      await writeCommand('DATA')
+      const dataResp = await readResponse()
+      if (dataResp.code !== 354) {
+        throw new Error(`Comando DATA rejeitado (${dataResp.code}): ${dataResp.fullText}`)
+      }
+
+      // 8. Montar mensagem MIME multipart/mixed com cabeçalhos e anexo PDF
+      const boundary = '==_Part_BibliotecaCEP_' + Date.now().toString(36)
+      const fromHeader = from.includes('<') ? from : `Biblioteca CEP <${from || user}>`
+      const toHeader = to.join(', ')
+
+      // Dividir base64 em linhas de no máximo 76 caracteres (padrão RFC 2045)
+      const base64Chunks: string[] = []
+      for (let i = 0; i < attachmentBase64.length; i += 76) {
+        base64Chunks.push(attachmentBase64.slice(i, i + 76))
+      }
+      const formattedAttachmentBase64 = base64Chunks.join('\r\n')
+
+      const mimeMessage = [
+        `From: ${fromHeader}`,
+        `To: ${toHeader}`,
+        `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`,
+        `Date: ${new Date().toUTCString()}`,
+        'MIME-Version: 1.0',
+        `Content-Type: multipart/mixed; boundary="${boundary}"`,
+        '',
+        `--${boundary}`,
+        'Content-Type: text/plain; charset="UTF-8"',
+        'Content-Transfer-Encoding: 8bit',
+        '',
+        body,
+        '',
+        `--${boundary}`,
+        `Content-Type: application/pdf; name="${attachmentName}"`,
+        `Content-Disposition: attachment; filename="${attachmentName}"`,
+        'Content-Transfer-Encoding: base64',
+        '',
+        formattedAttachmentBase64,
+        '',
+        `--${boundary}--`,
+        '.',
+      ].join('\r\n')
+
+      await writeCommand(mimeMessage)
+      const sendResp = await readResponse()
+      if (sendResp.code !== 250) {
+        throw new Error(
+          `Falha no envio do corpo da mensagem (${sendResp.code}): ${sendResp.fullText}`,
+        )
+      }
+
+      // 9. QUIT
+      try {
+        await writeCommand('QUIT')
+        await readResponse()
+      } catch {
+        // Ignorar falha no QUIT após confirmação do envio (código 250 já recebido)
+      }
+
+      return sendResp.fullText || '250 OK'
+    }
+
+    const resultMessage = await Promise.race([runSmtpSession(), timeoutPromise])
+
+    return {
+      success: true,
+      message: `E-mail enviado com sucesso via SMTP (${host}:${port}) com anexo ${attachmentName}.`,
+      provider: 'smtp',
+    }
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Falha no envio via SMTP (${host}:${port}): ${err.message}`,
+      provider: 'smtp',
+    }
+  } finally {
+    try {
+      if (reader) reader.releaseLock()
+    } catch {}
+    try {
+      if (writer) writer.releaseLock()
+    } catch {}
+    try {
+      if (conn) conn.close()
+    } catch {}
   }
 }

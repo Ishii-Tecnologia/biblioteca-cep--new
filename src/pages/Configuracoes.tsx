@@ -349,11 +349,16 @@ export default function Configuracoes() {
           variant: 'destructive',
         })
       } else {
+        const prov = res.provider || res.provedor_email
+        const provTitle =
+          prov === 'smtp'
+            ? 'Teste enviado via SMTP (Gmail)'
+            : prov === 'resend'
+              ? 'Teste enviado via Resend'
+              : 'Teste concluído (Envio Simulado)'
+
         toast({
-          title:
-            res.provedor_email === 'simulado'
-              ? 'Teste concluído (Modo Simulado)'
-              : 'Teste processado com sucesso',
+          title: provTitle,
           description: res.message,
           className: 'bg-white text-slate-900 border-emerald-200 shadow-md',
         })
@@ -392,8 +397,16 @@ export default function Configuracoes() {
           variant: 'destructive',
         })
       } else {
+        const prov = res.provedor_email || res.provider
+        const provDetail =
+          prov === 'smtp'
+            ? ' (via SMTP / Gmail)'
+            : prov === 'resend'
+              ? ' (via Resend)'
+              : ' (Envio simulado — nenhum provedor configurado)'
+
         toast({
-          title: 'Job Mensal Executado',
+          title: `Job Mensal Executado${provDetail}`,
           description: res.message,
           className: 'bg-white text-slate-900 border-emerald-200 shadow-md',
         })
@@ -1506,19 +1519,54 @@ export default function Configuracoes() {
                 </div>
               </div>
 
-              {/* Informações sobre Integração Resend / Provedor */}
-              <div className="p-3.5 rounded-lg bg-emerald-50/60 border border-emerald-200 text-xs text-emerald-950 space-y-1">
+              {/* Informações sobre Provedores de E-mail (Resend & SMTP/Gmail) */}
+              <div className="p-3.5 rounded-lg bg-emerald-50/60 border border-emerald-200 text-xs text-emerald-950 space-y-2">
                 <div className="flex items-center gap-1.5 font-semibold text-emerald-900">
-                  <Info className="w-4 h-4 text-emerald-600" />
+                  <Info className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span>Sobre a Entrega de E-mails e Segurança de Dados</span>
                 </div>
                 <p className="text-[11px] leading-relaxed text-emerald-800">
-                  A infraestrutura completa está implementada (Edge Function, idempotência por mês,
-                  auditoria e geração de PDF). Caso a chave <code>RESEND_API_KEY</code> esteja
-                  presente nas variáveis do Supabase, o envio externo é realizado de forma real via
-                  Resend. Caso ainda não esteja cadastrada, o envio é processado em modo simulado
-                  com validação e log completo da auditoria. Se o e-mail falhar, o expurgo é
-                  cancelado preventivamente.
+                  A rotina automática da biblioteca suporta envio por <strong>Resend</strong> ou por{' '}
+                  <strong>SMTP (Gmail ou institucional)</strong>, além de modo simulado transparente
+                  quando nenhum provedor estiver definido. Ordem de prioridade do backend:
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                  <div className="bg-white/80 p-2.5 rounded border border-emerald-200/80 text-[11px]">
+                    <span className="font-semibold text-emerald-900 block mb-1">
+                      Opção 1: Resend API
+                    </span>
+                    Requer apenas o segredo <code>RESEND_API_KEY</code> configurado no Supabase. O
+                    envio é realizado via API HTTPS nativa.
+                  </div>
+                  <div className="bg-white/80 p-2.5 rounded border border-emerald-200/80 text-[11px]">
+                    <span className="font-semibold text-emerald-900 block mb-1">
+                      Opção 2: SMTP / Gmail (Senha de App)
+                    </span>
+                    Requer os 4 segredos no Supabase: <code>SMTP_HOST</code> (ex:{' '}
+                    <em>smtp.gmail.com</em>), <code>SMTP_PORT</code> (<em>465</em> com TLS ou{' '}
+                    <em>587</em> com STARTTLS), <code>SMTP_USER</code> (seu e-mail Gmail) e{' '}
+                    <code>SMTP_PASS</code> (sua <em>Senha de App</em>).
+                  </div>
+                </div>
+                <div className="bg-amber-50/80 border border-amber-200 rounded p-2.5 text-[11px] text-amber-900">
+                  <strong>💡 Como obter a Senha de App no Gmail:</strong> ative a verificação em
+                  duas etapas na sua Conta Google e acesse{' '}
+                  <a
+                    href="https://myaccount.google.com/apppasswords"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline font-semibold text-amber-950 hover:text-amber-800"
+                  >
+                    myaccount.google.com/apppasswords
+                  </a>
+                  . Crie uma senha de app para &quot;Biblioteca CEP&quot; e utilize o código de 16
+                  letras gerado no segredo <code>SMTP_PASS</code>.
+                </div>
+                <p className="text-[10px] text-emerald-700 pt-0.5">
+                  <strong>Regra de integridade dos dados:</strong> se nenhum provedor estiver
+                  cadastrado, o envio opera em modo simulado. Se o e-mail falhar, a rotina de
+                  expurgo é <em>imediatamente cancelada</em> para garantir que nenhum histórico seja
+                  excluído sem comprovação de entrega do PDF.
                 </p>
               </div>
 
