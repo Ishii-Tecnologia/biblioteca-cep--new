@@ -44,6 +44,10 @@ import {
 import { AlertTriangle, UserCheck, Search } from 'lucide-react'
 import { downloadBookTemplateCsv, downloadBookFullExportCsv } from '@/lib/csv'
 import { TitulosService } from '@/services/titulos'
+import { AuditoriaJobService, AuditoriaJobConfig } from '@/services/auditoria-job'
+import { Mail, Send, Calendar, AlertCircle, CheckCircle2, History } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 
 const DEFAULT_PARAMS = {
   nome_biblioteca: {
@@ -194,6 +198,36 @@ export default function Configuracoes() {
     DEFAULT_PARAMS.csv_separador.defaultValue as ';' | ',',
   )
 
+  // Auditoria Automática & Expurgo States
+  const [auditConfig, setAuditConfig] = useState<AuditoriaJobConfig>({
+    ativo: false,
+    destinatarios: '',
+    assunto: 'Relatório de Auditoria — {data_referencia}',
+    corpo:
+      'Olá,\n\nSegue em anexo o Relatório de Auditoria do sistema Biblioteca CEP referente ao período de {data_inicio} até {data_fim}.\n\nTotal de registros auditados: {total_registros}.\nData de geração: {data_referencia}.\n\nAcesse o sistema para mais detalhes: {link_sistema}',
+    remetente: 'sys.biblioteca.cep@email.org',
+    diasRetroativos: 30,
+    diaEnvio: 1,
+    horaEnvio: '08:00',
+    diasRetencao: 90,
+  })
+  const [sendingTestEmail, setSendingTestEmail] = useState(false)
+  const [runningAuditJobNow, setRunningAuditJobNow] = useState(false)
+  const [latestJobInfo, setLatestJobInfo] = useState<any>(null)
+
+  const loadAuditSettings = async () => {
+    try {
+      const [config, latest] = await Promise.all([
+        AuditoriaJobService.loadConfig(),
+        AuditoriaJobService.getLatestExecution(),
+      ])
+      setAuditConfig(config)
+      setLatestJobInfo(latest)
+    } catch (err) {
+      console.error('Erro ao carregar configurações de auditoria:', err)
+    }
+  }
+
   const loadParams = async () => {
     setLoading(true)
     try {
@@ -289,7 +323,81 @@ export default function Configuracoes() {
     loadParams()
     loadCategories()
     loadAuthors()
+    loadAuditSettings()
   }, [])
+
+  const handleSendTestAuditEmail = async () => {
+    const { valid, invalid } = AuditoriaJobService.validateEmailList(auditConfig.destinatarios)
+    if (valid.length === 0) {
+      toast({
+        title: 'Destinatário obrigatório',
+        description: 'Informe ao menos um e-mail válido para disparar o teste.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setSendingTestEmail(true)
+    try {
+      // Salvar antes de testar para garantir que o teste utilize os dados atuais do form
+      await AuditoriaJobService.saveConfig(auditConfig)
+      const res = await AuditoriaJobService.sendTestEmail()
+      if (!res.success) {
+        throw new Error(res.error || res.message)
+      }
+
+      toast({
+        title: 'Teste processado com sucesso',
+        description: res.message,
+        className: 'bg-white text-slate-900 border-emerald-200 shadow-md',
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Falha no envio de teste',
+        description: err.message || 'Não foi possível disparar o e-mail de teste.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSendingTestEmail(false)
+      loadAuditSettings()
+    }
+  }
+
+  const handleRunAuditJobNow = async () => {
+    const { valid } = AuditoriaJobService.validateEmailList(auditConfig.destinatarios)
+    if (valid.length === 0) {
+      toast({
+        title: 'Destinatário obrigatório',
+        description: 'Informe ao menos um e-mail válido para executar o job mensal.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setRunningAuditJobNow(true)
+    try {
+      await AuditoriaJobService.saveConfig(auditConfig)
+      const res = await AuditoriaJobService.runJobNow(true)
+      if (!res.success) {
+        throw new Error(res.error || res.message)
+      }
+
+      toast({
+        title: 'Job Mensal Executado',
+        description: res.message,
+        className: 'bg-white text-slate-900 border-emerald-200 shadow-md',
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao executar job mensal',
+        description: err.message || 'Não foi possível executar a rotina de auditoria.',
+        variant: 'destructive',
+      })
+    } finally {
+      setRunningAuditJobNow(false)
+      loadAuditSettings()
+    }
+  }
 
   const handleDownloadTemplateCsv = () => {
     downloadBookTemplateCsv('template_importacao_acervo_cep.csv', csvSeparador)
@@ -530,6 +638,27 @@ export default function Configuracoes() {
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
+
+    // Validar destinatários caso ativado
+    if (auditConfig.ativo) {
+      const { valid, invalid } = AuditoriaJobService.validateEmailList(auditConfig.destinatarios)
+      if (valid.length === 0) {
+        toast({
+          title: 'Configuração inválida',
+          description: 'Para ativar o envio automático, informe ao menos 1 e-mail válido.',
+          variant: 'destructive',
+        })
+        return
+      }
+      if (invalid.length > 0) {
+        toast({
+          title: 'Aviso sobre e-mails inválidos',
+          description: `Os e-mails inválidos serão desconsiderados: ${invalid.join(', ')}.`,
+          variant: 'info',
+        })
+      }
+    }
+
     setSaving(true)
 
     const payload = [
@@ -605,7 +734,11 @@ export default function Configuracoes() {
         description: 'Todos os parâmetros operacionais e rótulos de autoria foram gravados.',
       })
 
+      // Gravar também as configurações do job de auditoria
+      await AuditoriaJobService.saveConfig(auditConfig)
+
       await loadParams()
+      await loadAuditSettings()
     } catch (err: any) {
       toast({
         title: 'Erro ao salvar configurações',
@@ -1108,6 +1241,343 @@ export default function Configuracoes() {
                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Card: Envio Automático do Relatório de Auditoria (Logs) & Expurgo */}
+          <Card className="border-slate-200 bg-white shadow-xs">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <Mail className="w-5 h-5 text-emerald-600" />
+                    Envio Automático do Relatório de Auditoria & Expurgo Mensal
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Configure o agendamento mensal que gera o Histórico Geral em PDF, envia por
+                    e-mail e realiza a rotina de expurgo em lotes.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className={`text-xs py-0.5 px-2.5 font-medium ${
+                      auditConfig.ativo
+                        ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                        : 'border-slate-200 bg-slate-50 text-slate-500'
+                    }`}
+                  >
+                    {auditConfig.ativo ? 'Agendamento Ativo' : 'Agendamento Inativo'}
+                  </Badge>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* Toggle de ativação */}
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-lg">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="auditoria_ativo"
+                    className="text-xs font-bold text-slate-900 cursor-pointer"
+                  >
+                    Habilitar Envio Mensal Automático & Rotina de Expurgo
+                  </Label>
+                  <p className="text-[11px] text-slate-500">
+                    O job roda diariamente. Se o dia atual coincidir com o configurado, executa na
+                    ordem obrigatória: <strong>Gerar PDF → Enviar E-mail → Expurgar Base</strong>.
+                  </p>
+                </div>
+                <Switch
+                  id="auditoria_ativo"
+                  checked={auditConfig.ativo}
+                  onCheckedChange={(checked) =>
+                    setAuditConfig((prev) => ({ ...prev, ativo: checked }))
+                  }
+                  disabled={!isAdmin || saving}
+                />
+              </div>
+
+              {/* Grid de Destinatários e Remetente */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <Label
+                      htmlFor="auditoria_destinatarios"
+                      className="text-xs font-semibold text-slate-700"
+                    >
+                      Destinatários (separados por vírgula) *
+                    </Label>
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      chave: auditoria_destinatarios
+                    </span>
+                  </div>
+                  <Input
+                    id="auditoria_destinatarios"
+                    type="text"
+                    value={auditConfig.destinatarios}
+                    onChange={(e) =>
+                      setAuditConfig((prev) => ({ ...prev, destinatarios: e.target.value }))
+                    }
+                    disabled={!isAdmin || saving}
+                    placeholder="auditoria@instituicao.org, diretoria@instituicao.org"
+                    className="text-xs font-mono"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Ao menos 1 e-mail válido é obrigatório para ativar. E-mails inválidos serão
+                    ignorados e auditados.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="auditoria_remetente"
+                    className="text-xs font-semibold text-slate-700"
+                  >
+                    Remetente Exibido
+                  </Label>
+                  <Input
+                    id="auditoria_remetente"
+                    type="text"
+                    value={auditConfig.remetente}
+                    onChange={(e) =>
+                      setAuditConfig((prev) => ({ ...prev, remetente: e.target.value }))
+                    }
+                    disabled={!isAdmin || saving}
+                    className="text-xs font-mono"
+                  />
+                  <p className="text-[11px] text-slate-500">Padrão institucional do sistema.</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="auditoria_assunto"
+                    className="text-xs font-semibold text-slate-700"
+                  >
+                    Assunto do E-mail
+                  </Label>
+                  <Input
+                    id="auditoria_assunto"
+                    type="text"
+                    value={auditConfig.assunto}
+                    onChange={(e) =>
+                      setAuditConfig((prev) => ({ ...prev, assunto: e.target.value }))
+                    }
+                    disabled={!isAdmin || saving}
+                    className="text-xs"
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Variável disponível: <code>{'{data_referencia}'}</code>
+                  </p>
+                </div>
+              </div>
+
+              {/* Corpo do E-mail */}
+              <div className="space-y-1.5">
+                <Label htmlFor="auditoria_corpo" className="text-xs font-semibold text-slate-700">
+                  Corpo da Mensagem
+                </Label>
+                <Textarea
+                  id="auditoria_corpo"
+                  rows={4}
+                  value={auditConfig.corpo}
+                  onChange={(e) => setAuditConfig((prev) => ({ ...prev, corpo: e.target.value }))}
+                  disabled={!isAdmin || saving}
+                  className="text-xs font-sans leading-relaxed"
+                />
+                <p className="text-[11px] text-slate-500">
+                  Variáveis: <code>{'{data_inicio}'}</code>, <code>{'{data_fim}'}</code>,{' '}
+                  <code>{'{data_referencia}'}</code>, <code>{'{total_registros}'}</code>,{' '}
+                  <code>{'{link_sistema}'}</code>.
+                </p>
+              </div>
+
+              {/* Parâmetros de Filtro N, Agendamento e Expurgo */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="dias_retroativos"
+                    className="text-xs font-semibold text-slate-700 flex items-center gap-1"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                    Período do Relatório (N)
+                  </Label>
+                  <Input
+                    id="dias_retroativos"
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={auditConfig.diasRetroativos}
+                    onChange={(e) =>
+                      setAuditConfig((prev) => ({
+                        ...prev,
+                        diasRetroativos: Math.max(1, Math.min(365, parseInt(e.target.value) || 1)),
+                      }))
+                    }
+                    disabled={!isAdmin || saving}
+                    className="text-xs bg-white font-mono h-9"
+                  />
+                  <p className="text-[10px] text-slate-500">Últimos N dias no PDF (1-365).</p>
+                </div>
+
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="dia_envio"
+                    className="text-xs font-semibold text-slate-700 flex items-center gap-1"
+                  >
+                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                    Dia do Mês de Envio
+                  </Label>
+                  <Input
+                    id="dia_envio"
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={auditConfig.diaEnvio}
+                    onChange={(e) =>
+                      setAuditConfig((prev) => ({
+                        ...prev,
+                        diaEnvio: Math.max(1, Math.min(31, parseInt(e.target.value) || 1)),
+                      }))
+                    }
+                    disabled={!isAdmin || saving}
+                    className="text-xs bg-white font-mono h-9"
+                  />
+                  <p className="text-[10px] text-slate-500">
+                    Dia 1 a 31 (último dia em meses curtos).
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="hora_envio"
+                    className="text-xs font-semibold text-slate-700 flex items-center gap-1"
+                  >
+                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                    Horário Referência
+                  </Label>
+                  <Input
+                    id="hora_envio"
+                    type="time"
+                    value={auditConfig.horaEnvio}
+                    onChange={(e) =>
+                      setAuditConfig((prev) => ({ ...prev, horaEnvio: e.target.value }))
+                    }
+                    disabled={!isAdmin || saving}
+                    className="text-xs bg-white font-mono h-9"
+                  />
+                  <p className="text-[10px] text-slate-500">Fuso: America/Sao_Paulo.</p>
+                </div>
+
+                <div className="space-y-1">
+                  <Label
+                    htmlFor="dias_retencao"
+                    className="text-xs font-semibold text-rose-800 flex items-center gap-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    Retenção de Expurgo
+                  </Label>
+                  <Input
+                    id="dias_retencao"
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={auditConfig.diasRetencao}
+                    onChange={(e) =>
+                      setAuditConfig((prev) => ({
+                        ...prev,
+                        diasRetencao: Math.max(1, parseInt(e.target.value) || 1),
+                      }))
+                    }
+                    disabled={!isAdmin || saving}
+                    className="text-xs bg-white font-mono h-9 border-rose-200"
+                  />
+                  <p className="text-[10px] text-rose-600">Apaga registros com mais de N dias.</p>
+                </div>
+              </div>
+
+              {/* Informações sobre Integração Resend / Provedor */}
+              <div className="p-3.5 rounded-lg bg-emerald-50/60 border border-emerald-200 text-xs text-emerald-950 space-y-1">
+                <div className="flex items-center gap-1.5 font-semibold text-emerald-900">
+                  <Info className="w-4 h-4 text-emerald-600" />
+                  <span>Sobre a Entrega de E-mails e Segurança de Dados</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-emerald-800">
+                  A infraestrutura completa está implementada (Edge Function, idempotência por mês,
+                  auditoria e geração de PDF). Caso a chave <code>RESEND_API_KEY</code> esteja
+                  presente nas variáveis do Supabase, o envio externo é realizado de forma real via
+                  Resend. Caso ainda não esteja cadastrada, o envio é processado em modo simulado
+                  com validação e log completo da auditoria. Se o e-mail falhar, o expurgo é
+                  cancelado preventivamente.
+                </p>
+              </div>
+
+              {/* Status da última execução */}
+              {latestJobInfo && (
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <History className="w-4 h-4 text-slate-500 shrink-0" />
+                    <div>
+                      <span className="font-semibold text-slate-800">
+                        Última Execução Registrada:{' '}
+                      </span>
+                      <span className="font-mono text-[11px] text-slate-600">
+                        {latestJobInfo.ano_mes}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={`ml-2 text-[10px] py-0 px-1.5 ${
+                          latestJobInfo.status === 'sucesso'
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : 'border-rose-200 bg-rose-50 text-rose-700'
+                        }`}
+                      >
+                        {latestJobInfo.status.toUpperCase()}
+                      </Badge>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{latestJobInfo.mensagem}</p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-mono shrink-0">
+                    {new Date(latestJobInfo.data_execucao).toLocaleString('pt-BR')}
+                  </span>
+                </div>
+              )}
+
+              {/* Ações de Teste e Disparo Imediato */}
+              {isAdmin && (
+                <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSendTestAuditEmail}
+                    disabled={sendingTestEmail || runningAuditJobNow}
+                    className="w-full sm:w-auto text-xs font-medium gap-2 border-slate-300 hover:bg-slate-50"
+                  >
+                    {sendingTestEmail ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Send className="w-3.5 h-3.5" />
+                    )}
+                    Enviar E-mail de Teste (PDF Amostra)
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRunAuditJobNow}
+                    disabled={sendingTestEmail || runningAuditJobNow}
+                    className="w-full sm:w-auto text-xs font-medium gap-2 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+                  >
+                    {runningAuditJobNow ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Zap className="w-3.5 h-3.5 text-amber-500" />
+                    )}
+                    Disparar Job Mensal Imediatamente (PDF + E-mail + Expurgo)
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
 

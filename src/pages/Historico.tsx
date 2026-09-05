@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast'
 import { formatDate, formatDateTime, formatCPF, formatPhone } from '@/lib/utils'
 import { exportToCsv } from '@/lib/csv'
 import { getCsvSeparador } from '@/services/parametros'
+import { AuditoriaJobService, AuditoriaJobConfig } from '@/services/auditoria-job'
 import { DatePickerBR } from '@/components/DatePickerBR'
 import {
   History,
@@ -87,6 +88,10 @@ export default function Historico() {
   const [tipoFiltroLogs, setTipoFiltroLogs] = useState<string>(initialTipoParam)
   const [dataInicioLogs, setDataInicioLogs] = useState('')
   const [dataFimLogs, setDataFimLogs] = useState('')
+
+  // Auditoria Automática & Expurgo States
+  const [auditConfig, setAuditConfig] = useState<AuditoriaJobConfig | null>(null)
+  const [runningJob, setRunningJob] = useState(false)
 
   // Clean logs modal
   const [isCleanModalOpen, setIsCleanModalOpen] = useState(false)
@@ -296,6 +301,61 @@ export default function Historico() {
     }
   }, [searchParams])
 
+  // Carregar status do agendamento de auditoria
+  const fetchAuditConfig = async () => {
+    try {
+      const cfg = await AuditoriaJobService.loadConfig()
+      setAuditConfig(cfg)
+    } catch (e) {
+      console.warn('Erro ao carregar parâmetros de auditoria no histórico:', e)
+    }
+  }
+
+  // Disparo manual com filtro de N dias
+  const handleExecuteAuditJobDirect = async () => {
+    setRunningJob(true)
+    try {
+      const res = await AuditoriaJobService.runJobNow(true)
+      if (!res.success) {
+        throw new Error(res.error || res.message)
+      }
+      toast({
+        title: 'Job de Auditoria Executado',
+        description: res.message,
+        className: 'bg-white text-slate-900 border-emerald-200 shadow-md',
+      })
+      await fetchLogs()
+      await fetchAuditConfig()
+    } catch (err: any) {
+      toast({
+        title: 'Falha ao executar auditoria mensal',
+        description: err.message || 'Erro inesperado na execução do job.',
+        variant: 'destructive',
+      })
+    } finally {
+      setRunningJob(false)
+    }
+  }
+
+  // Aplicar filtro dos últimos N dias no histórico
+  const handleApplyNDaysFilter = () => {
+    const days = auditConfig?.diasRetroativos || 30
+    const today = new Date()
+    const startDate = new Date(today.getTime() - days * 24 * 60 * 60 * 1000)
+
+    const startStr = `${String(startDate.getDate()).padStart(2, '0')}/${String(startDate.getMonth() + 1).padStart(2, '0')}/${startDate.getFullYear()}`
+    const endStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`
+
+    setDataInicioLogs(startStr)
+    setDataFimLogs(endStr)
+    fetchLogs(undefined, startStr, endStr)
+
+    toast({
+      title: `Filtro aplicado: últimos ${days} dias`,
+      description: `Período configurado de ${startStr} até ${endStr}.`,
+    })
+  }
+
   // Load logs
   const fetchLogs = async (customTipo?: string, customInicio?: string, customFim?: string) => {
     // Quando o tipo estiver marcado como "Todos os tipos" (ou "todos"), listar todos os registros da tabela (sem filtro de tipo)
@@ -439,6 +499,7 @@ export default function Historico() {
 
   useEffect(() => {
     fetchLogs()
+    fetchAuditConfig()
   }, [tipoFiltroLogs])
 
   useEffect(() => {
@@ -1852,18 +1913,79 @@ export default function Historico() {
                     Imprimir / PDF
                   </Button>
                   {isAdmin && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setIsCleanModalOpen(true)}
-                      className="gap-1.5"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Limpar Registros
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExecuteAuditJobDirect}
+                        disabled={runningJob}
+                        className="gap-1.5 border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+                        title="Disparar fluxo completo agora: gerar PDF, enviar por e-mail e expurgar a base"
+                      >
+                        <Mail className="h-4 w-4 text-emerald-600" />
+                        {runningJob ? 'Processando Job...' : 'Disparar Envio & Expurgo Mensal'}
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => setIsCleanModalOpen(true)}
+                        className="gap-1.5"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Limpar Registros
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
+
+              {/* Banner de Status do Job Automático e Atalho para Últimos N Dias */}
+              {auditConfig && (
+                <div className="p-3 bg-slate-50 dark:bg-muted/30 border border-slate-200 dark:border-border rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${auditConfig.ativo ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}
+                    />
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100">
+                        <span>Envio Automático & Expurgo:</span>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] py-0 px-1.5 ${
+                            auditConfig.ativo
+                              ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                              : 'border-slate-300 bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {auditConfig.ativo
+                            ? `Ativo (Todo dia ${auditConfig.diaEnvio} às ${auditConfig.horaEnvio})`
+                            : 'Inativo no momento'}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Período do relatório:{' '}
+                        <strong>últimos {auditConfig.diasRetroativos} dias</strong> • Retenção de
+                        expurgo: <strong>{auditConfig.diasRetencao} dias</strong> • Destinatários:{' '}
+                        <em>{auditConfig.destinatarios || 'nenhum configurado'}</em>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleApplyNDaysFilter}
+                      className="h-7 text-xs gap-1 border-slate-300 hover:bg-slate-100"
+                      title={`Filtrar tabela para os últimos ${auditConfig.diasRetroativos} dias conforme regra do job`}
+                    >
+                      <Calendar className="w-3 h-3 text-emerald-600" />
+                      Filtrar Últimos {auditConfig.diasRetroativos} Dias
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Atalhos Rápidos & Filtros da aba de logs */}
               <div className="space-y-3 pt-4">

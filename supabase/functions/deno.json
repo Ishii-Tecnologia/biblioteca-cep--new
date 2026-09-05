@@ -1,5 +1,6 @@
 {
   "_versions": {
-    "admin_reset_password": 128
+    "admin_reset_password": 131,
+    "auditoria_mensal_expurgo": 1
   }
 }
