@@ -158,14 +158,34 @@ export const AuditoriaJobService = {
       })
 
       if (error) {
+        // Tentar extrair corpo JSON retornado pela Edge Function se disponível
+        let detailedMsg = error.message
+        if ((error as any).context && typeof (error as any).context.json === 'function') {
+          try {
+            const errJson = await (error as any).context.json()
+            if (errJson?.error || errJson?.message) {
+              detailedMsg = errJson.error || errJson.message
+            }
+          } catch {
+            // falha ao analisar context json, manter mensagem original
+          }
+        }
+
         return {
           success: false,
-          error: error.message || 'Falha ao acionar a função de teste de e-mail.',
-          message: 'Falha no disparo do teste.',
+          error: detailedMsg || 'Falha ao acionar a função de teste de e-mail.',
+          message: detailedMsg || 'Falha no disparo do teste.',
         }
       }
 
-      return data as JobRunResponse
+      if (data && typeof data === 'object') {
+        return data as JobRunResponse
+      }
+
+      return {
+        success: true,
+        message: 'Disparo de teste concluído com sucesso.',
+      }
     } catch (err: any) {
       return {
         success: false,
@@ -182,14 +202,33 @@ export const AuditoriaJobService = {
       })
 
       if (error) {
+        let detailedMsg = error.message
+        if ((error as any).context && typeof (error as any).context.json === 'function') {
+          try {
+            const errJson = await (error as any).context.json()
+            if (errJson?.error || errJson?.message) {
+              detailedMsg = errJson.error || errJson.message
+            }
+          } catch {
+            // falha ao analisar context json
+          }
+        }
+
         return {
           success: false,
-          error: error.message || 'Falha ao executar o job de auditoria.',
-          message: 'Falha na execução.',
+          error: detailedMsg || 'Falha ao executar o job de auditoria.',
+          message: detailedMsg || 'Falha na execução.',
         }
       }
 
-      return data as JobRunResponse
+      if (data && typeof data === 'object') {
+        return data as JobRunResponse
+      }
+
+      return {
+        success: true,
+        message: 'Job de auditoria executado com sucesso.',
+      }
     } catch (err: any) {
       return {
         success: false,

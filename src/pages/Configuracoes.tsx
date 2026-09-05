@@ -343,14 +343,21 @@ export default function Configuracoes() {
       await AuditoriaJobService.saveConfig(auditConfig)
       const res = await AuditoriaJobService.sendTestEmail()
       if (!res.success) {
-        throw new Error(res.error || res.message)
+        toast({
+          title: 'Não foi possível enviar o teste',
+          description: res.error || res.message || 'Falha ao processar o disparo de teste.',
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title:
+            res.provedor_email === 'simulado'
+              ? 'Teste concluído (Modo Simulado)'
+              : 'Teste processado com sucesso',
+          description: res.message,
+          className: 'bg-white text-slate-900 border-emerald-200 shadow-md',
+        })
       }
-
-      toast({
-        title: 'Teste processado com sucesso',
-        description: res.message,
-        className: 'bg-white text-slate-900 border-emerald-200 shadow-md',
-      })
     } catch (err: any) {
       toast({
         title: 'Falha no envio de teste',
@@ -379,14 +386,18 @@ export default function Configuracoes() {
       await AuditoriaJobService.saveConfig(auditConfig)
       const res = await AuditoriaJobService.runJobNow(true)
       if (!res.success) {
-        throw new Error(res.error || res.message)
+        toast({
+          title: 'Aviso na execução do Job',
+          description: res.error || res.message || 'A rotina não pôde ser completada.',
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title: 'Job Mensal Executado',
+          description: res.message,
+          className: 'bg-white text-slate-900 border-emerald-200 shadow-md',
+        })
       }
-
-      toast({
-        title: 'Job Mensal Executado',
-        description: res.message,
-        className: 'bg-white text-slate-900 border-emerald-200 shadow-md',
-      })
     } catch (err: any) {
       toast({
         title: 'Erro ao executar job mensal',

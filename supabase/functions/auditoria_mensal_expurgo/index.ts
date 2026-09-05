@@ -136,9 +136,11 @@ Deno.serve(async (req: Request) => {
     if (!supabaseUrl || !supabaseServiceKey) {
       return new Response(
         JSON.stringify({
-          error: 'Configuração do servidor ausente (SUPABASE_URL / SERVICE_ROLE_KEY)',
+          success: false,
+          error: 'Configuração do servidor ausente (SUPABASE_URL / SERVICE_ROLE_KEY).',
+          message: 'Configuração de backend incompleta no ambiente.',
         }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
@@ -146,7 +148,12 @@ Deno.serve(async (req: Request) => {
       auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    const body = await req.json().catch(() => ({}))
+    let body: any = {}
+    try {
+      body = await req.json()
+    } catch {
+      body = {}
+    }
     const { action = 'executar_job', force = false, test_email = false } = body
 
     // 1. Carregar parâmetros atuais da tabela public.parametros
@@ -295,16 +302,20 @@ Deno.serve(async (req: Request) => {
     if (validEmails.length === 0) {
       const errMsg =
         'Nenhum e-mail de destinatário válido configurado para o envio do relatório de auditoria.'
-      await supabaseAdmin.from('historico').insert({
-        tipo: 'Falha no Envio de Auditoria',
-        descricao: errMsg,
-        entidade_tipo: 'sistema',
-        entidade_id: 'job_auditoria',
-        observacao: 'O expurgo NÃO foi realizado devido à ausência de destinatários válidos.',
-      })
+      try {
+        await supabaseAdmin.from('historico').insert({
+          tipo: 'Falha no Envio de Auditoria',
+          descricao: errMsg,
+          entidade_tipo: 'sistema',
+          entidade_id: 'job_auditoria',
+          observacao: 'O expurgo NÃO foi realizado devido à ausência de destinatários válidos.',
+        })
+      } catch (logErr) {
+        console.warn('Não foi possível gravar histórico de falha:', logErr)
+      }
 
-      return new Response(JSON.stringify({ success: false, error: errMsg }), {
-        status: 400,
+      return new Response(JSON.stringify({ success: false, error: errMsg, message: errMsg }), {
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -438,9 +449,11 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           success: false,
-          error: `Falha no envio de e-mail: ${emailResult.message}. O expurgo foi cancelado para resguardar os dados.`,
+          error: `Falha no envio de e-mail: ${emailResult.message}. O expurgo foi cancelado para resguardar os dados da biblioteca.`,
+          message: `Falha no envio do e-mail. A base de histórico NÃO foi expurgada.`,
+          emailResult,
         }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
 
@@ -507,8 +520,12 @@ Deno.serve(async (req: Request) => {
   } catch (err: any) {
     console.error('Erro na Edge Function auditoria_mensal_expurgo:', err)
     return new Response(
-      JSON.stringify({ error: err.message || 'Erro interno ao processar o job de auditoria.' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      JSON.stringify({
+        success: false,
+        error: err.message || 'Erro interno ao processar o job de auditoria.',
+        message: err.message || 'Erro ao processar rotina de auditoria.',
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   }
 })
@@ -523,7 +540,7 @@ async function handleSendTest({
   diasRetroativos,
   dataReferenciaExtenso,
 }: any) {
-  const emailList = rawDestinatarios
+  const emailList = (rawDestinatarios || '')
     .split(',')
     .map((e: string) => e.trim())
     .filter((e: string) => e.length > 0)
@@ -541,8 +558,9 @@ async function handleSendTest({
         success: false,
         error:
           'Nenhum e-mail de destinatário válido configurado. Insira ao menos 1 e-mail válido antes de testar.',
+        message: 'Nenhum e-mail válido informado para envio de teste.',
       }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   }
 
